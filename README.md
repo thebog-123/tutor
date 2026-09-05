@@ -130,12 +130,35 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Running it on Replit instead
+
+The repo carries a `.replit` config, so importing it gives you a working
+workspace without installing anything locally.
+
+1. On [replit.com](https://replit.com): **Create Repl → Import from GitHub**,
+   and connect your GitHub account so it can see the private repo.
+2. Open the **Shell** tab and run `npm install`.
+3. Open the **Secrets** tab (padlock icon) and add the three variables from
+   the table above. Secrets are the Replit equivalent of `.env.local` — put
+   `SUPABASE_SERVICE_ROLE_KEY` here, never in a committed file.
+4. Back in the Shell, run `npm run seed`.
+5. Press **Run**. Replit serves the dev server on the webview URL.
+
+Two Replit-specific details are already handled: `npm run dev:replit` binds to
+`0.0.0.0` so Replit's proxy can reach it, and `allowedDevOrigins` in
+`next.config.mjs` stops Next refusing the proxied cross-origin dev requests.
+
+Note that a running Repl is reachable by anyone with the URL, so treat a
+seeded instance as a demo rather than somewhere to put real student data.
+
 ### Other scripts
 
 ```bash
-npm run build      # production build
-npm run typecheck  # tsc --noEmit
-npm run lint       # next lint
+npm run build        # production build
+npm run typecheck    # tsc --noEmit
+npm run lint         # next lint
+npm run dev:replit   # dev server bound to 0.0.0.0:3000 (Replit and containers)
+npm run start:replit # production server bound to 0.0.0.0:3000
 ```
 
 ---

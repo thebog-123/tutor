@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:replit": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
+    "start:replit": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts"
