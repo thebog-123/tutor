@@ -11,10 +11,9 @@
 :root{
   --navy-900:#0A1A2F; --navy-700:#14304F; --navy-500:#33506F;
   --navy-300:#7286A0; --navy-200:#A8B6C7;
-  --rule:#DFE5EC; --white:#FFFFFF;
+  --card:#F5F8FB; --pill:#EDF2F7; --rule:#DFE5EC; --white:#FFFFFF;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-
 body{
   background:#4A5462;font-family:"DM Sans",ui-sans-serif,system-ui,sans-serif;
   color:var(--navy-500);-webkit-font-smoothing:antialiased;padding:32px 16px;
@@ -23,91 +22,114 @@ body{
 .hint strong{color:#fff}
 
 .page{
-  width:210mm;height:297mm;margin:0 auto;background:var(--white);
+  width:210mm;height:297mm;margin:0 auto 26px;background:var(--white);
   display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 24px 70px rgba(0,0,0,.45);
 }
-h1,h2,h3,.serif{
+h1,h2,h3{
   font-family:"Fraunces","Iowan Old Style",Georgia,serif;
-  font-optical-sizing:none;
-  font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;
-  font-weight:600;
-  color:var(--navy-900);
+  font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;
+  font-weight:600;color:var(--navy-900);
 }
 .label{font-size:8.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--navy-300)}
 
-/* ----------------------------------------------------------------- hero
-   Asymmetric on purpose: the headline runs wide, the standfirst sits in a
-   narrower measure beneath it rather than matching its width. */
-.hero{padding:14mm 16mm 0}
-.hero h1{margin-top:5mm;font-size:41px;line-height:1.08;letter-spacing:-.022em}
-.hero .lede{
-  margin-top:5mm;max-width:118mm;
-  font-size:13px;line-height:1.7;color:var(--navy-500);
+/* ------------------------------------------------------------- pills */
+.pills{display:flex;flex-wrap:wrap;gap:2.5mm}
+.pill{
+  display:inline-flex;align-items:center;gap:2mm;
+  background:var(--pill);border-radius:999px;padding:2mm 4mm;
+  font-size:10px;color:var(--navy-700);
 }
+.pill .dot{width:5px;height:5px;border-radius:50%;background:var(--navy-700);flex:none}
 
-/* ------------------------------------------------------------ spec list
-   Heading left, detail right, separated by hairlines. Deliberately a
-   different rhythm from the timeline further down. */
-.specs{margin:10mm 16mm 0;border-top:1px solid var(--rule)}
-.spec{
-  display:grid;grid-template-columns:50mm 1fr;gap:8mm;
-  padding:4.5mm 0;border-bottom:1px solid var(--rule);
-}
-.spec h3{font-size:14px;letter-spacing:-.015em;line-height:1.3}
-.spec p{font-size:11px;line-height:1.68;color:var(--navy-500);max-width:104mm}
+/* -------------------------------------------------------------- hero */
+.hero{padding:15mm 16mm 0}
+.hero h1{margin-top:5mm;font-size:40px;line-height:1.08;letter-spacing:-.022em}
+.hero .lede{margin-top:5mm;max-width:150mm;font-size:12.5px;line-height:1.72;color:var(--navy-500)}
+.hero .pills{margin-top:7mm}
 
-/* -------------------------------------------------------------- levels
-   Given real scale so it reads as a statement, not a grey bar. */
-.levels{margin:9mm 16mm 0}
-.levels .row{display:flex;align-items:baseline;gap:9mm;margin-top:4mm}
+/* ------------------------------------------------------------- cards */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;padding:10mm 16mm 0}
+.card{background:var(--card);border-radius:5mm;padding:7mm 6mm;display:flex;flex-direction:column}
+.card svg{width:21px;height:21px;color:var(--navy-700);stroke-width:1.4}
+.card h3{margin-top:4.5mm;font-size:13.5px;letter-spacing:-.012em;line-height:1.25}
+.card p{margin-top:3mm;font-size:10.5px;line-height:1.65;color:var(--navy-500)}
+.card .pill{margin-top:4.5mm;align-self:flex-start;background:var(--white);font-size:9.5px}
+
+/* ------------------------------------------------------------ levels */
+.levels{padding:11mm 16mm 0}
 .levels .set{
   font-family:"Fraunces","Iowan Old Style",Georgia,serif;
   font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;
-  font-size:23px;letter-spacing:-.02em;color:var(--navy-900);
+  margin-top:4mm;font-size:23px;letter-spacing:-.02em;color:var(--navy-900);
 }
 .levels .set span{color:var(--rule);margin:0 3mm}
 .levels .any{margin-top:3mm;font-size:11px;color:var(--navy-500)}
 
-/* ------------------------------------------------------------ timeline */
-.timeline{margin:10mm 16mm 0}
-.track{display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;margin-top:6mm}
-.stop{position:relative;padding-top:8mm}
-.stop .node{
-  position:absolute;top:0;left:0;width:9px;height:9px;border-radius:50%;
-  background:var(--navy-900);z-index:1;
-}
-/* the connecting line: each stop draws the segment to the one after it */
-.stop::after{
-  content:"";position:absolute;top:4px;left:9px;
-  width:calc(100% + 10mm - 9px);height:1px;background:var(--rule);
-}
-.stop:last-child::after{display:none}
-.stop .num{font-size:8.5px;font-weight:600;letter-spacing:.2em;color:var(--navy-300)}
-.stop h3{margin-top:2.5mm;font-size:14px;letter-spacing:-.015em}
-.stop p{margin-top:2.5mm;font-size:11px;line-height:1.66;color:var(--navy-500)}
-
-/* --------------------------------------------------------------- footer */
-.cta{
+/* ------------------------------------------------------- front strip */
+.strip{
   margin-top:auto;background:var(--navy-900);color:var(--white);
-  padding:10mm 16mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12mm;
+  padding:8mm 16mm;display:flex;align-items:center;justify-content:space-between;gap:8mm;
 }
-.cta .lead{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;font-size:23px;letter-spacing:-.025em;color:var(--white);line-height:1.15}
-.cta .sub{margin-top:3mm;font-size:11px;line-height:1.6;color:var(--navy-200);max-width:88mm}
-.contact{margin-top:6mm;display:flex;gap:12mm}
-.contact .label{display:block;color:var(--navy-300);margin-bottom:2.5mm}
-.contact .detail{display:block;font-size:12.5px;color:var(--white);letter-spacing:-.01em}
-.referral{flex:none;width:54mm;padding-left:8mm;border-left:1px solid rgba(255,255,255,.18)}
-.referral .label{display:block;color:var(--navy-300);margin-bottom:3mm}
-.referral .amt{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;font-size:31px;line-height:1;color:var(--white);letter-spacing:-.03em;white-space:nowrap}
-.referral .amt span{color:var(--navy-300);margin:0 1mm;font-weight:400}
-.referral p{margin-top:3.5mm;font-size:10.5px;line-height:1.6;color:var(--navy-200)}
+.strip .say{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;font-size:17px;color:var(--white);letter-spacing:-.02em}
+.strip .det{display:flex;gap:9mm;font-size:11.5px;color:var(--white)}
+.strip .det span{display:block;font-size:8px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--navy-300);margin-bottom:1.5mm}
+
+/* ---------------------------------------------------------- timeline */
+.how{padding:15mm 16mm 0}
+.track{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;margin-top:6mm}
+.stop{background:var(--card);border-radius:5mm;padding:7mm 6mm;position:relative}
+.stop .top{display:flex;align-items:center;justify-content:space-between}
+.stop svg{width:21px;height:21px;color:var(--navy-700);stroke-width:1.4}
+.stop .num{font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--navy-300)}
+.stop h3{margin-top:4.5mm;font-size:13.5px;letter-spacing:-.012em}
+.stop p{margin-top:3mm;font-size:10.5px;line-height:1.65;color:var(--navy-500)}
+
+/* ------------------------------------------------------- testimonial */
+.quote{margin:11mm 16mm 0;padding:7mm 8mm;background:var(--card);border-radius:5mm}
+.quote blockquote{
+  font-family:"Fraunces","Iowan Old Style",Georgia,serif;
+  font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:500;
+  font-size:17px;line-height:1.42;letter-spacing:-.015em;color:var(--navy-900);
+}
+.quote figcaption{margin-top:4mm;font-size:10.5px;color:var(--navy-300)}
+
+/* ---------------------------------------------------------- referral */
+.refer{flex:none;width:52mm;padding-left:8mm;border-left:1px solid rgba(255,255,255,.18)}
+.refer .label{display:block;color:var(--navy-300);margin-bottom:3mm}
+.refer .amt{
+  font-family:"Fraunces","Iowan Old Style",Georgia,serif;
+  font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;
+  font-size:27px;color:var(--white);letter-spacing:-.03em;white-space:nowrap;
+}
+.refer .amt span{color:var(--navy-300);margin:0 1mm;font-weight:400}
+.refer p{margin-top:3.5mm;font-size:10px;line-height:1.6;color:var(--navy-200)}
+
+/* ------------------------------------------------------------ talk to */
+.talk{
+  margin-top:auto;background:var(--navy-900);color:var(--white);padding:10mm 16mm;
+  display:flex;align-items:flex-end;justify-content:space-between;gap:10mm;
+}
+.talk-main{flex:1;min-width:0}
+.talk h2{font-size:21px;color:var(--white);letter-spacing:-.025em;line-height:1.2;max-width:130mm}
+.talk .sub{margin-top:3.5mm;font-size:11.5px;line-height:1.6;color:var(--navy-200);max-width:120mm}
+.actions{margin-top:6mm;display:flex;gap:4mm;flex-wrap:wrap}
+.btn{
+  display:block;border-radius:3.5mm;padding:4mm 6mm;min-width:53mm;
+  background:var(--white);color:var(--navy-900);
+}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.28);color:var(--white)}
+.btn .act{display:block;font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+.btn .det{display:block;margin-top:1.5mm;font-size:11px;color:var(--navy-500)}
+.btn.ghost .det{color:var(--navy-200)}
+.talk .foot{margin-top:5mm;font-size:10px;color:var(--navy-300)}
 
 @page{size:A4;margin:0}
 @media print{
   body{background:#fff;padding:0}
   .hint{display:none}
   .page{box-shadow:none;margin:0}
+  
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
@@ -115,86 +137,84 @@ h1,h2,h3,.serif{
 <body>
 
 <p class="hint">
-  A4 flier. To export: <strong>Cmd + P</strong> → <strong>Save as PDF</strong>,
-  Margins <strong>None</strong>, tick <strong>Background graphics</strong>.
+  A4 flier. Export with <strong>Cmd + P</strong> → Save as PDF,
+  Margins <strong>None</strong>, Background graphics <strong>on</strong>.
 </p>
 
+<!-- ================================================================ FRONT -->
 <div class="page">
 
   <section class="hero">
     <p class="label">One-to-one online tutoring</p>
     <h1>Tutors who’ve just<br>sat these exams.</h1>
     <p class="lede">
-      Every lesson is one to one and online. Your tutor will be a current student at a leading
-      university or school, with top grades in the subject they teach. They sat the same papers
-      a year or two ago, so they still remember what the examiner was actually looking for.
+      I match students with tutors who are still at university or school themselves, and who did
+      brilliantly in the subject they teach. They sat the same papers a year or two ago, so they
+      haven’t had time to forget what the examiner wanted.
     </p>
+    <div class="pills">
+      <span class="pill"><span class="dot"></span>One-to-one only</span>
+      <span class="pill"><span class="dot"></span>Current specification</span>
+      <span class="pill"><span class="dot"></span>Usually matched in 1–2 days</span>
+      <span class="pill"><span class="dot"></span>No joining fee</span>
+    </div>
   </section>
 
-  <section class="specs">
-    <div class="spec">
-      <h3>Chosen on results</h3>
-      <p>Grades first, then whether they can explain the thing to someone who is properly stuck. Both matter, and the second one is rarer.</p>
+  <section class="cards">
+    <div class="card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5 7 21l5-2.5L17 21l-1.5-7.5"/>
+      </svg>
+      <h3>They got the grades</h3>
+      <p>I pick on results first, then on whether they can explain something to a person who’s properly stuck. The second turns out to be rarer.</p>
     </div>
-    <div class="spec">
-      <h3>On the current spec</h3>
-      <p>They studied the specification your child is sitting now, not one that has since been rewritten. Same board, same papers, same mark schemes.</p>
+    <div class="card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h4"/>
+      </svg>
+      <h3>They know this year’s spec</h3>
+      <p>The same specification your child is on, not one that’s since been rewritten. Same board, same papers, same mark schemes.</p>
     </div>
-    <div class="spec">
-      <h3>Matched by a person</h3>
-      <p>We read every enquiry and choose the tutor ourselves. No database to search, no shortlist to work through, no rotating pool.</p>
+    <div class="card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 11 2 2 4-4"/>
+      </svg>
+      <h3>I choose the tutor myself</h3>
+      <p>You tell me what’s needed, and I’ll tell you who I think fits and why.</p>
+      <span class="pill">No algorithms. No tutor marketplace.</span>
     </div>
   </section>
 
   <section class="levels">
     <p class="label">Levels</p>
-    <div class="row">
-      <p class="set">11+ <span>/</span> KS3 <span>/</span> IB <span>/</span> A&nbsp;Level</p>
-    </div>
-    <p class="any">Any subject. Ask us and we will see what we can do.</p>
+    <p class="set">11+ <span>/</span> KS3 <span>/</span> IB <span>/</span> A&nbsp;Level</p>
+    <p class="any">Any subject. Ask me and I’ll see what I can do.</p>
   </section>
 
-  <section class="timeline">
-    <p class="label">How it works</p>
-    <div class="track">
-      <div class="stop">
-        <span class="node"></span>
-        <p class="num">01</p>
-        <h3>You get in touch</h3>
-        <p>Tell us the level, the subject, and what is going wrong. A couple of lines is plenty.</p>
-      </div>
-      <div class="stop">
-        <span class="node"></span>
-        <p class="num">02</p>
-        <h3>We find the tutor</h3>
-        <p>Usually within a day or two. We tell you who they are and why we picked them.</p>
-      </div>
-      <div class="stop">
-        <span class="node"></span>
-        <p class="num">03</p>
-        <h3>Lessons begin</h3>
-        <p>One to one and online, at a time in the week that fits around school.</p>
-      </div>
-    </div>
-  </section>
 
-  <section class="cta">
-    <div>
-      <p class="lead">Tell us what you need.</p>
-      <p class="sub">Nothing to pay to enquire, and nothing to pay to be matched. Every message gets a proper reply.</p>
-      <div class="contact">
-        <div><span class="label">Email</span><span class="detail">vansch.agrawal@gmail.com</span></div>
-        <div><span class="label">Call or message</span><span class="detail">+44 7493 017655</span></div>
+  <figure class="quote">
+    <blockquote>“It felt like having someone who had literally just been through the same exam.”</blockquote>
+    <figcaption>A-level student, London</figcaption>
+  </figure>
+
+  <section class="talk">
+    <div class="talk-main">
+      <h2>Not sure what tutor you need?</h2>
+      <p class="sub">That’s completely normal. Tell me what’s going on and I’ll work out who fits.
+         It costs nothing to ask, and nothing to be matched.</p>
+      <div class="actions">
+        <span class="btn"><span class="act">Message me</span><span class="det">+44 7493 017655</span></span>
+        <span class="btn ghost"><span class="act">Send an enquiry</span><span class="det">vansch.agrawal@gmail.com</span></span>
       </div>
+      <p class="foot">I read every message myself, and I’ll always reply properly.</p>
     </div>
-    <aside class="referral">
+    <aside class="refer">
       <p class="label">Refer a student</p>
       <p class="amt">£5 <span>+</span> £5</p>
-      <p>They get £5 off their first lesson. You get £5 once they have taken it.
-         Anyone can refer, as many times as they like.</p>
+      <p>They get £5 off their first lesson. You get £5 once they’ve had it. Refer as often as you like.</p>
     </aside>
   </section>
-
 </div>
+
 </body>
 </html>
