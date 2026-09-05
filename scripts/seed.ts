@@ -331,6 +331,10 @@ async function main() {
   console.log("  5 lesson notes");
 
   // ------------------------------------------------------------- questions
+  //
+  // Every row here must carry the same keys. PostgREST unifies the columns
+  // across a bulk insert and sends an explicit NULL for any key a row leaves
+  // out, so an omitted column does NOT fall back to its database default.
   const { error: questionError } = await db.from("questions").insert([
     {
       student_id: S("jonah.price@thebinder.test"),
@@ -357,8 +361,11 @@ async function main() {
     {
       student_id: S("kit.marchetti@thebinder.test"),
       teacher_id: T("sofia.reyes@thebinder.test"),
+      session_id: null,
       question_text:
         "Is it alright to disagree with the critic I'm quoting, or does that look like I've misunderstood them?",
+      answer_text: null,
+      read_by_student: false,
       created_at: at(-1, 21, 5),
     },
     {
@@ -367,6 +374,8 @@ async function main() {
       session_id: sessionByTopic.get("Integration by parts") ?? null,
       question_text:
         "I'm stuck on the recursive one from the sheet — after two rounds of parts I'm back where I started. What am I missing?",
+      answer_text: null,
+      read_by_student: false,
       created_at: at(0, 9, 20),
     },
   ]);

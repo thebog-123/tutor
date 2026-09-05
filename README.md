@@ -80,6 +80,8 @@ SQL Editor in one go. It is safe to re-run.
 3. `0003_storage.sql` — the private `lesson-notes` bucket and its policies
 4. `0004_referrals.sql` — referral codes, the `referrals` table, and the
    commission accrual trigger
+5. `0005_question_defaults.sql` — coerces explicit NULLs on question inserts
+   (see the note below on PostgREST bulk inserts)
 
 If you use the Supabase CLI instead:
 
@@ -132,6 +134,17 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### A note on bulk inserts
+
+PostgREST unifies the columns across a bulk insert and sends an explicit
+`NULL` for any key a given row omits — it does **not** fall back to the
+column's default. So a `NOT NULL DEFAULT` column is rejected rather than
+defaulted whenever some rows in the batch set it and others don't.
+
+The seed script keeps every row in a batch on the same key set, and
+`sync_question_status` coerces those columns defensively before the NOT NULL
+check runs. Worth remembering if you add bulk inserts of your own.
 
 ### Running it on Replit instead
 
