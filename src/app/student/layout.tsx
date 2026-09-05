@@ -25,6 +25,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
         { href: "/student/questions", label: "Ask a question", badge: unread ?? 0 },
         { href: "/student/sessions", label: "Upcoming sessions" },
         { href: "/student/invoices", label: "Invoices" },
+        { href: "/student/refer", label: "Refer a friend" },
       ]}
     >
       {children}

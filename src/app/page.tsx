@@ -71,8 +71,13 @@ async function getTutors(): Promise<PublicTutor[]> {
   }
 }
 
-export default async function HomePage() {
-  const tutors = await getTutors();
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
+  const [tutors, { ref }] = await Promise.all([getTutors(), searchParams]);
+  const referralCode = ref?.trim().toUpperCase().slice(0, 32);
 
   return (
     <div className="paper-grain min-h-screen bg-paper-100">
@@ -317,6 +322,7 @@ export default async function HomePage() {
                   "No fees to enquire or to be matched",
                   "A named tutor, not a rotating pool",
                   "Portal access for the student and the parent",
+                  "Referred by someone? They earn 10% of your first lesson",
                 ].map((line) => (
                   <li key={line} className="flex gap-2.5">
                     <span
@@ -329,7 +335,7 @@ export default async function HomePage() {
               </ul>
             </div>
             <Card className="p-6 sm:p-8">
-              <EnquiryForm />
+              <EnquiryForm defaultReferralCode={referralCode} />
             </Card>
           </div>
         </section>

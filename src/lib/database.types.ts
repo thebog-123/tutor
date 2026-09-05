@@ -9,6 +9,7 @@ export type InvoiceStatus = "draft" | "due" | "paid" | "overdue";
 export type PayoutStatus = "pending" | "processing" | "paid";
 export type EnquiryRole = "parent_student" | "prospective_tutor";
 export type EnquiryStatus = "new" | "contacted" | "converted" | "closed";
+export type ReferralStatus = "pending" | "payable" | "paid" | "void";
 
 export type AppUser = {
   id: string;
@@ -16,6 +17,7 @@ export type AppUser = {
   full_name: string;
   role: UserRole;
   phone: string | null;
+  referral_code: string;
   created_at: string;
 };
 
@@ -116,6 +118,29 @@ export type Enquiry = {
   subject: string | null;
   message: string;
   status: EnquiryStatus;
+  admin_note: string | null;
+  referral_code: string | null;
+  referrer_name: string | null;
+  created_at: string;
+};
+
+export type Referral = {
+  id: string;
+  referrer_user_id: string | null;
+  referrer_name: string;
+  referrer_email: string | null;
+  referred_name: string;
+  referred_email: string | null;
+  student_id: string | null;
+  enquiry_id: string | null;
+  note: string | null;
+  commission_rate: number;
+  commission_amount: number | null;
+  commission_amount_override: number | null;
+  currency: string;
+  source_invoice_id: string | null;
+  status: ReferralStatus;
+  paid_at: string | null;
   admin_note: string | null;
   created_at: string;
 };

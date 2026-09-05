@@ -14,7 +14,7 @@ function SubmitButton() {
   );
 }
 
-export function EnquiryForm() {
+export function EnquiryForm({ defaultReferralCode }: { defaultReferralCode?: string }) {
   const [state, formAction] = useActionState<EnquiryState, FormData>(submitEnquiry, {
     status: "idle",
     message: null,
@@ -73,6 +73,36 @@ export function EnquiryForm() {
             maxLength={160}
             placeholder="e.g. GCSE Maths"
             className="field-input"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="field-label" htmlFor="enq-referrer">
+            Who referred you?{" "}
+            <span className="font-normal normal-case tracking-normal">(optional)</span>
+          </label>
+          <input
+            id="enq-referrer"
+            name="referrer_name"
+            maxLength={120}
+            placeholder="Their name"
+            className="field-input"
+          />
+        </div>
+        <div>
+          <label className="field-label" htmlFor="enq-code">
+            Referral code{" "}
+            <span className="font-normal normal-case tracking-normal">(optional)</span>
+          </label>
+          <input
+            id="enq-code"
+            name="referral_code"
+            maxLength={32}
+            defaultValue={defaultReferralCode ?? ""}
+            placeholder="e.g. K7PQ2M"
+            className="field-input font-mono uppercase tracking-widest"
           />
         </div>
       </div>

@@ -24,6 +24,8 @@ export default async function TeacherLayout({ children }: { children: React.Reac
         { href: "/teacher/questions", label: "Questions", badge: openQuestions ?? 0 },
         { href: "/teacher/calendar", label: "Calendar" },
         { href: "/teacher/earnings", label: "Earnings" },
+        { href: "/teacher/refer", label: "Refer a friend" },
+        { href: "/teacher/profile", label: "My profile" },
       ]}
     >
       {children}

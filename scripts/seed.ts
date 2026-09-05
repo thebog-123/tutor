@@ -229,6 +229,7 @@ async function main() {
 
   // Clear the demo relations so re-running doesn't pile up duplicates.
   const studentIds = [...studentIdByEmail.values()];
+  await db.from("referrals").delete().like("referrer_email", "%@thebinder.test");
   await db.from("notes").delete().in("student_id", studentIds);
   await db.from("questions").delete().in("student_id", studentIds);
   await db.from("invoices").delete().in("student_id", studentIds);
@@ -372,6 +373,51 @@ async function main() {
   if (questionError) throw questionError;
   console.log("  4 questions (2 answered, 2 open)");
 
+  // ------------------------------------------------------------- referrals
+  //
+  // Recorded before the invoices below, so the accrual trigger fires the way
+  // it does in real use: a referral is on file, then the referred student's
+  // first invoice is paid, and the 10% lands by itself.
+  const { data: jonahUser } = await db
+    .from("users")
+    .select("id, full_name, email, referral_code")
+    .eq("email", "jonah.price@thebinder.test")
+    .single();
+  if (!jonahUser) throw new Error("Seed order problem: Jonah's user row is missing");
+
+  const { error: referralError } = await db.from("referrals").insert([
+    {
+      // portal referrer, referred student's first invoice is still due
+      referrer_user_id: jonahUser.id,
+      referrer_name: jonahUser.full_name,
+      referrer_email: jonahUser.email,
+      referred_name: "Amara Osei",
+      referred_email: "amara.osei@thebinder.test",
+      student_id: S("amara.osei@thebinder.test"),
+      note: "Amara is in my year at school and was struggling with the GCSE Maths mocks.",
+    },
+    {
+      // referrer with no account, referred student's first invoice gets paid below
+      referrer_name: "Olu Adeyemi",
+      referrer_email: "olu.adeyemi@thebinder.test",
+      referred_name: "Noor Haddad",
+      referred_email: "noor.haddad@thebinder.test",
+      student_id: S("noor.haddad@thebinder.test"),
+      note: "Family friend — passed our details on.",
+    },
+    {
+      // logged from the portal, not yet an enquiry
+      referrer_user_id: jonahUser.id,
+      referrer_name: jonahUser.full_name,
+      referrer_email: jonahUser.email,
+      referred_name: "Sam Whitfield",
+      referred_email: "sam.whitfield@thebinder.test",
+      note: "Hasn't enquired yet — Jonah logged this one from his portal.",
+    },
+  ]);
+  if (referralError) throw referralError;
+  console.log("  3 referrals");
+
   // -------------------------------------------------------------- invoices
   const { error: invoiceError } = await db.from("invoices").insert([
     {
@@ -425,14 +471,15 @@ async function main() {
       hours: 1,
       amount: 65,
       teacher_payout_amount: 42,
-      status: "due",
+      status: "paid",
       issued_at: dateOnly(-4),
       due_date: dateOnly(10),
+      paid_at: at(-2, 11, 0),
       payout_status: "processing",
     },
   ]);
   if (invoiceError) throw invoiceError;
-  console.log("  4 invoices");
+  console.log("  4 invoices (Noor's paid one accrues Olu's 10% commission)");
 
   // ------------------------------------------------------------- enquiries
   const { error: enquiryError } = await db.from("enquiries").insert([
@@ -464,6 +511,17 @@ async function main() {
       status: "contacted",
       admin_note: "Called back 2 Sept — sending over the 11+ pack, deciding by Friday.",
     },
+    {
+      name: "Priya Raman",
+      email: "priya.raman@thebinder.test",
+      role: "parent_student",
+      subject: "A Level Chemistry",
+      message:
+        "Jonah's mum recommended you — he's been with Alice since the spring. Our son is in Year 12 and needs help before the summer exams.",
+      status: "new",
+      referrer_name: "Jonah Price",
+      referral_code: jonahUser!.referral_code,
+    },
   ]);
   if (enquiryError) throw enquiryError;
   console.log("  3 enquiries\n");
@@ -474,7 +532,9 @@ async function main() {
   console.log("  Teacher  /login         alice.nwosu@thebinder.test");
   console.log("  Student  /login         jonah.price@thebinder.test");
   console.log("\nTheo Lindqvist is deliberately left unassigned so the admin");
-  console.log("Connections page has a student waiting to be matched.\n");
+  console.log("Connections page has a student waiting to be matched.");
+  console.log("Jonah has referred two people (see Refer a friend); Noor's referral");
+  console.log("has already earned its 10% because her first invoice is paid.\n");
 }
 
 main().catch((error) => {

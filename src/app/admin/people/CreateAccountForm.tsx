@@ -169,6 +169,23 @@ export function CreateAccountForm({
             />
           </div>
           <div className="sm:col-span-2">
+            <label className="field-label" htmlFor="acc-referral">
+              Referral code{" "}
+              <span className="font-normal normal-case tracking-normal">(optional)</span>
+            </label>
+            <input
+              id="acc-referral"
+              name="referral_code"
+              maxLength={32}
+              placeholder="From their enquiry, if someone referred them"
+              className="field-input font-mono uppercase tracking-widest sm:max-w-xs"
+            />
+            <p className="mt-1 text-xs text-ink-400">
+              Records a referral for the code&apos;s owner. They earn 10% of this student&apos;s
+              first paid invoice.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
             <label className="field-label" htmlFor="acc-teacher">
               Assign a tutor now{" "}
               <span className="font-normal normal-case tracking-normal">(optional)</span>

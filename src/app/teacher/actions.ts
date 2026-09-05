@@ -215,3 +215,38 @@ export async function answerQuestion(formData: FormData): Promise<ActionResult> 
   revalidatePath("/student", "layout");
   return OK;
 }
+
+/* -------------------------------------------------------------- profile */
+
+/**
+ * A tutor's own profile copy. It's shown to their students and, when the
+ * agency has published them, on the public homepage — so tutors maintain it
+ * themselves. Homepage visibility (`is_published`) stays with the agency.
+ */
+export async function updateTeacherProfile(formData: FormData): Promise<ActionResult> {
+  const { teacher } = await requireTeacher();
+
+  const years = String(formData.get("years_experience") ?? "").trim();
+  const yearsValue = years === "" ? null : Number(years);
+  if (yearsValue !== null && (!Number.isInteger(yearsValue) || yearsValue < 0 || yearsValue > 70)) {
+    return fail("Years of experience must be a whole number between 0 and 70.");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("teachers")
+    .update({
+      subject_specialty: String(formData.get("subject_specialty") ?? "").trim() || null,
+      headline: String(formData.get("headline") ?? "").trim() || null,
+      bio: String(formData.get("bio") ?? "").trim() || null,
+      years_experience: yearsValue,
+    })
+    .eq("id", teacher.id);
+
+  if (error) return fail("Couldn't save your profile.");
+
+  revalidatePath("/teacher", "layout");
+  revalidatePath("/student", "layout");
+  revalidatePath("/", "layout");
+  return OK;
+}

@@ -80,6 +80,26 @@ export default async function AdminEnquiriesPage() {
                   <Badge tone={STATUS_TONE[enquiry.status]}>{enquiry.status}</Badge>
                 </div>
 
+                {enquiry.referrer_name || enquiry.referral_code ? (
+                  <p className="mt-3 rounded-lg border border-mustard-200 bg-mustard-100 px-3 py-2 text-xs text-ink-700">
+                    Referred by{" "}
+                    <span className="font-semibold">
+                      {enquiry.referrer_name ?? "someone using a code"}
+                    </span>
+                    {enquiry.referral_code ? (
+                      <>
+                        {" "}
+                        · code{" "}
+                        <span className="font-mono font-semibold tracking-wider">
+                          {enquiry.referral_code}
+                        </span>
+                      </>
+                    ) : null}
+                    . Enter this code when you create their account and the 10% commission is
+                    recorded automatically.
+                  </p>
+                ) : null}
+
                 <p className="mt-4 whitespace-pre-line rounded-lg bg-paper-100 px-4 py-3 text-sm leading-relaxed text-ink-700">
                   {enquiry.message}
                 </p>

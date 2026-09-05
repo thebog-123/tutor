@@ -6,7 +6,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const profile = await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
-  const [{ count: unassigned }, { count: newEnquiries }] = await Promise.all([
+  const [{ count: unassigned }, { count: newEnquiries }, { count: payableReferrals }] =
+    await Promise.all([
     supabase
       .from("students")
       .select("id", { count: "exact", head: true })
@@ -15,6 +16,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       .from("enquiries")
       .select("id", { count: "exact", head: true })
       .eq("status", "new"),
+    supabase
+      .from("referrals")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "payable"),
   ]);
 
   return (
@@ -30,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { href: "/admin/questions", label: "Question activity" },
         { href: "/admin/billing", label: "Billing" },
         { href: "/admin/enquiries", label: "Enquiries", badge: newEnquiries ?? 0 },
+        { href: "/admin/referrals", label: "Referrals", badge: payableReferrals ?? 0 },
       ]}
     >
       {children}

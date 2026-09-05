@@ -16,6 +16,8 @@ export async function submitEnquiry(
   const role = String(formData.get("role") ?? "") as EnquiryRole;
   const subject = String(formData.get("subject") ?? "").trim();
   const message = String(formData.get("message") ?? "").trim();
+  const referralCode = String(formData.get("referral_code") ?? "").trim().toUpperCase();
+  const referrerName = String(formData.get("referrer_name") ?? "").trim();
   // Honeypot: real people leave this hidden field empty.
   const trap = String(formData.get("company") ?? "");
 
@@ -33,6 +35,9 @@ export async function submitEnquiry(
   if (message.length > 4000) {
     return { status: "error", message: "Please keep your message under 4000 characters." };
   }
+  if (referralCode.length > 32) {
+    return { status: "error", message: "That referral code doesn't look right." };
+  }
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("enquiries").insert({
@@ -42,6 +47,8 @@ export async function submitEnquiry(
     subject: subject || null,
     message,
     status: "new",
+    referral_code: referralCode || null,
+    referrer_name: referrerName || null,
   });
 
   if (error) {
