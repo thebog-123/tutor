@@ -1,0 +1,296 @@
+# The Binder
+
+A tutoring agency portal — a public marketing site with an enquiry form, plus
+three role-scoped dashboards for the agency admin, its tutors, and its students.
+
+Built with **Next.js (App Router) + TypeScript**, **Supabase** (auth, Postgres,
+storage) and **Tailwind CSS**. Deploys to Vercel.
+
+---
+
+## What's in it
+
+**Public homepage** (`/`) — hero, subjects and levels, how it works, tutor cards
+pulled from the database, testimonials, and an enquiry form that writes to the
+`enquiries` table for the admin to pick up.
+
+**Login** (`/login`) — teacher/student toggle, email and password. The agency
+admin signs in separately at `/login/admin`. There is **no self-signup**: the
+admin creates every account.
+
+**Teacher dashboard** (`/teacher`)
+- Overview — student count, open questions, amount owed
+- My students — the current roster
+- Sessions & notes — past and upcoming lessons, plus note uploads (file +
+  title + summary) tied to a student and optionally a session
+- Questions — threaded Q&A, reply and edit
+- Calendar — schedule, reschedule and cancel sessions; paste a Zoom link per
+  session
+- Earnings — sessions taught, hours, amount owed, payout status
+
+**Student dashboard** (`/student`)
+- Overview — tutor, unread replies, amount due, next lesson
+- My tutor — their assigned tutor's profile
+- Lesson notes — read-only feed, most recent first, with signed download links
+- Ask a question — post a question, optionally tied to a lesson; see the reply
+- Upcoming sessions — "Join on Zoom" when the link is shared, otherwise
+  "Link not shared yet"
+- Invoices — charges and payment status
+
+**Admin dashboard** (`/admin`)
+- Overview — tutors, students, students needing a match, outstanding balance
+- Connections — the core action: assign or reassign a tutor from a dropdown,
+  saved instantly, with search and a "needs a match only" filter
+- Accounts — create teacher and student accounts (this is the signup path)
+- All sessions — read-only across every tutor/student pair
+- Question activity — read-only across every thread, flagging ones unanswered
+  for more than 48 hours
+- Billing — raise invoices, set invoice and payout status
+- Enquiries — homepage submissions, with status and an internal note
+
+---
+
+## Running it locally
+
+### 1. Create a Supabase project
+
+Go to [supabase.com/dashboard](https://supabase.com/dashboard), create a
+project, and wait for it to finish provisioning.
+
+### 2. Run the migrations
+
+In the Supabase dashboard, open **SQL Editor** and run the three files in
+`supabase/migrations/` **in order**:
+
+1. `0001_schema.sql` — tables, enums, indexes
+2. `0002_rls.sql` — identity helpers, guard triggers, row level security,
+   and the public tutor view
+3. `0003_storage.sql` — the private `lesson-notes` bucket and its policies
+
+If you use the Supabase CLI instead:
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+### 3. Set environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in the three values from **Project Settings → API**:
+
+| Variable | Where to find it | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL | Safe in the browser |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `anon` `public` key | Safe in the browser; RLS protects the data |
+| `SUPABASE_SERVICE_ROLE_KEY` | `service_role` `secret` key | **Server only.** Bypasses RLS. Never prefix it with `NEXT_PUBLIC_` |
+
+### 4. Install and seed
+
+```bash
+npm install
+npm run seed
+```
+
+The seed script creates one admin, three tutors, five students (one
+deliberately left unassigned so the Connections page has something to do),
+plus sessions, lesson notes, questions, invoices and enquiries.
+
+It prints the demo logins when it finishes. All of them share one password
+(`binder-demo-2024` by default — override with `SEED_PASSWORD`):
+
+| Role | Login page | Email |
+| --- | --- | --- |
+| Admin | `/login/admin` | `admin@thebinder.test` |
+| Teacher | `/login` | `alice.nwosu@thebinder.test` |
+| Student | `/login` | `jonah.price@thebinder.test` |
+
+The seed is idempotent — re-running it reuses accounts by email and replaces
+the demo sessions, notes, questions, invoices and enquiries.
+
+### 5. Run it
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### Other scripts
+
+```bash
+npm run build      # production build
+npm run typecheck  # tsc --noEmit
+npm run lint       # next lint
+```
+
+---
+
+## Data model
+
+```
+users      (id → auth.users, email, full_name, role, phone)
+teachers   (id, user_id, subject_specialty, headline, bio,
+            years_experience, hourly_rate, avatar_url, is_published)
+students   (id, user_id, year_group, subject, teacher_id → teachers,
+            guardian_name, guardian_email, admin_notes)
+sessions   (id, teacher_id, student_id, scheduled_at, duration_minutes,
+            topic, zoom_link, status)
+notes      (id, session_id, teacher_id, student_id, title, summary,
+            file_path, file_name, file_type, file_size, uploaded_at)
+questions  (id, student_id, teacher_id, session_id, question_text,
+            answer_text, status, read_by_student, answered_at)
+invoices   (id, student_id, teacher_id, description, hours, amount, currency,
+            status, issued_at, due_date, paid_at, period_start, period_end,
+            teacher_payout_amount, payout_status, payout_paid_at,
+            provider, provider_customer_id, provider_invoice_id,
+            provider_payment_id, provider_metadata)
+enquiries  (id, name, email, role, subject, message, status, admin_note)
+```
+
+`students.teacher_id` **is** the teacher–student connection. It is nullable:
+null means "needs a match", which is what the admin dashboard counts.
+
+### Access rules
+
+Row level security is on for every table. Policies call `SECURITY DEFINER`
+helper functions (`is_admin()`, `current_teacher_id()`, `current_student_id()`,
+`my_tutor_teacher_id()`) so a policy on one table can look at another without
+recursing into that table's own policies.
+
+| | Teacher | Student | Admin |
+| --- | --- | --- | --- |
+| Students | read/edit own assigned only | own row only | everything |
+| Sessions | read/write own | read own | everything |
+| Notes | read/write own | read own | everything |
+| Questions | read own, write the answer | read own, write the question | everything |
+| Invoices | read own (payouts) | read own | read/write everything |
+| Enquiries | — | — | read/write everything |
+
+Three guard triggers back the policies up:
+
+- `guard_user_privileges` — only an admin can change a `role` or `email`, so
+  nobody can promote themselves
+- `guard_student_connection` — only an admin can change `students.teacher_id`,
+  even though teachers and students may edit other fields on that row
+- `guard_question_answer` — a student may edit their own question text but not
+  write the answer, flip the status, or reassign the thread
+
+`sync_question_status` keeps `status` and `answered_at` consistent with
+`answer_text` rather than trusting the client.
+
+Two deliberate departures from a literal reading of the brief, both in the
+direction of least surprise:
+
+- **Students cannot edit sessions.** The brief lists sessions among what a
+  student can "see/edit"; in practice a student editing the lesson schedule or
+  the Zoom link is not something an agency wants. Sessions are teacher-writable
+  and student-readable. The student's writable surface is questions.
+- **Teachers cannot edit invoices.** Invoices are raised and settled by the
+  agency; teachers see their payout rows read-only.
+
+### File storage
+
+Lesson note attachments live in a **private** `lesson-notes` bucket, keyed
+`<student_id>/<session_id|general>/<uuid>-<filename>`. The storage policies read
+the student id out of the first path segment, so only that student's assigned
+tutor can write there and only that student, their tutor, or an admin can read.
+
+Files are uploaded straight from the browser to Supabase Storage — that keeps
+large uploads off the serverless request path, where Vercel caps request bodies
+at 4.5 MB. Downloads go through `/api/notes/[id]/download`, which looks the note
+up through the caller's own session (so RLS decides whether they can see it at
+all) and then mints a 60-second signed URL.
+
+---
+
+## Billing
+
+Payment processing is **not** wired up. Invoices are tracked manually:
+`draft → due → paid`, with `overdue` for anything past its due date, and a
+separate `pending → processing → paid` payout status for what the agency owes
+the tutor.
+
+The table already carries `provider`, `provider_customer_id`,
+`provider_invoice_id`, `provider_payment_id` and a `provider_metadata` jsonb
+column, plus `currency`. Adding Stripe or GoCardless later means writing a
+webhook handler that fills those in and flips `status` — no schema change.
+
+---
+
+## Deploying to Vercel
+
+1. Push this repository to GitHub and import it at
+   [vercel.com/new](https://vercel.com/new). The framework preset is detected
+   automatically.
+2. Add the three environment variables from `.env.local` under
+   **Settings → Environment Variables**. `SUPABASE_SERVICE_ROLE_KEY` must not be
+   prefixed with `NEXT_PUBLIC_`.
+3. Deploy.
+4. In Supabase, add your deployment URL under
+   **Authentication → URL Configuration → Site URL / Redirect URLs**.
+
+---
+
+## Design
+
+Warm paper background, navy ink text, sage green and mustard accents, with a
+muted clay used only for overdue and destructive states. Headings are IBM Plex
+Serif, body copy IBM Plex Sans, both loaded through `next/font`. Tokens live in
+`tailwind.config.ts`; shared primitives (`Card`, `Button`, `Badge`, `Stat`,
+`EmptyState`) in `src/components/ui`.
+
+The layout is responsive to mobile throughout: the portal sidebar collapses to
+a top bar with a Menu toggle, stat grids and card grids reflow to one column,
+and wide tables scroll horizontally inside their own container rather than
+forcing the page sideways.
+
+Every list has an empty state written for the situation it actually describes —
+"No students assigned yet" for a new tutor, "We're finding you a tutor" for an
+unmatched student, "Everyone is matched" on the admin overview.
+
+---
+
+## Project layout
+
+```
+src/
+  app/
+    page.tsx                 public homepage
+    login/                   login + agency admin login
+    teacher/                 teacher dashboard + server actions
+    student/                 student dashboard + server actions
+    admin/                   admin dashboard + server actions
+    api/notes/[id]/download  signed URL redirect for note attachments
+    actions/enquiries.ts     public enquiry form action
+  components/
+    ui/                      design system primitives
+    portal/                  shared dashboard components
+    marketing/               homepage components
+    PortalShell.tsx          responsive dashboard chrome
+  lib/
+    supabase/                browser, server, admin clients + middleware
+    queries/                 per-role data access
+    auth.ts                  role guards
+    format.ts                dates, money, hours, file sizes
+supabase/migrations/         schema, RLS, storage
+scripts/seed.ts              demo data
+```
+
+## Known gaps
+
+- No password reset or "change your password" flow. The admin sets a temporary
+  password, shown once at creation; wiring up Supabase's password recovery
+  email is the natural next step.
+- No email notifications. Enquiries, new replies and issued invoices are all
+  visible in the portal only.
+- The admin can create accounts but not edit or deactivate them; that means
+  going through the Supabase dashboard for now.
+- Tutors can't edit their own profile (specialty, headline, bio) from the
+  portal yet, even though it appears on the public homepage and on their
+  students' "My tutor" page. The admin sets it at account creation.
+- Tutor avatars have a column (`teachers.avatar_url`) but no upload UI — the
+  homepage and profiles fall back to initials.

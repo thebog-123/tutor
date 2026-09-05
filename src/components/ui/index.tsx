@@ -202,7 +202,3 @@ export function EmptyState({
     </div>
   );
 }
-
-export function Divider({ className }: { className?: string }) {
-  return <hr className={cn("border-paper-200", className)} />;
-}
