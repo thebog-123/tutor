@@ -3,138 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Binder — A4 flier</title>
+<title>Tutoring — A4 flier</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* ---------------------------------------------------------------- tokens */
 :root{
-  --navy-900:#0A1A2F;   /* headlines, footer band            */
-  --navy-700:#14304F;   /* secondary dark                    */
-  --navy-500:#33506F;   /* body copy                         */
-  --navy-300:#7286A0;   /* muted labels                      */
-  --navy-200:#A8B6C7;   /* reversed muted, on navy           */
-  --rule:#E2E7ED;       /* hairlines                         */
-  --wash:#F6F8FA;       /* the one tint, used very sparingly */
-  --white:#FFFFFF;
+  --navy-900:#0A1A2F; --navy-700:#14304F; --navy-500:#33506F;
+  --navy-300:#7286A0; --navy-200:#A8B6C7;
+  --rule:#DFE5EC; --white:#FFFFFF;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 
-/* ------------------------------------------------------- screen preview */
 body{
-  background:#4A5462;
-  font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
-  color:var(--navy-500);
-  -webkit-font-smoothing:antialiased;
-  padding:32px 16px;
+  background:#4A5462;font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  color:var(--navy-500);-webkit-font-smoothing:antialiased;padding:32px 16px;
 }
 .hint{max-width:210mm;margin:0 auto 20px;color:#E4E7EB;font-size:13px;line-height:1.6;text-align:center}
 .hint strong{color:#fff}
 
-/* ---------------------------------------------------------- the A4 page */
 .page{
-  width:210mm;height:297mm;margin:0 auto;
-  background:var(--white);
-  display:flex;flex-direction:column;
-  overflow:hidden;
+  width:210mm;height:297mm;margin:0 auto;background:var(--white);
+  display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 24px 70px rgba(0,0,0,.45);
 }
-h1,h2,h3,.serif{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
+h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
+.label{font-size:8.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--navy-300)}
 
-/* --------------------------------------------------------------- header */
-.header{
-  display:flex;align-items:baseline;justify-content:space-between;
-  margin:14mm 16mm 0;padding-bottom:5mm;
-  border-bottom:1px solid var(--rule);
-}
-.wordmark{
-  font-family:"IBM Plex Serif",Georgia,serif;
-  font-size:18px;letter-spacing:-.02em;color:var(--navy-900);
-}
-.header .kicker{
-  font-size:8.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--navy-300);
-}
-
-/* ----------------------------------------------------------------- hero */
-.hero{padding:12mm 16mm 0}
-.hero .eyebrow{
-  font-size:9px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--navy-300);
-}
-.hero h1{
-  margin-top:6mm;
-  font-size:43px;line-height:1.05;letter-spacing:-.032em;
-}
+/* ----------------------------------------------------------------- hero
+   Asymmetric on purpose: the headline runs wide, the standfirst sits in a
+   narrower measure beneath it rather than matching its width. */
+.hero{padding:14mm 16mm 0}
+.hero h1{margin-top:5mm;font-size:44px;line-height:1.04;letter-spacing:-.034em}
 .hero .lede{
-  margin-top:5mm;max-width:146mm;
-  font-size:13px;line-height:1.68;color:var(--navy-500);
+  margin-top:5mm;max-width:118mm;
+  font-size:13px;line-height:1.7;color:var(--navy-500);
 }
 
-/* ---------------------------------------------------------- value props */
-.props{display:grid;grid-template-columns:repeat(3,1fr);gap:9mm;padding:11mm 16mm 0}
-.prop{border-top:1px solid var(--rule);padding-top:4.5mm}
-.prop svg{width:19px;height:19px;color:var(--navy-700);stroke-width:1.25}
-.prop h3{margin-top:3.5mm;font-size:13.5px;letter-spacing:-.015em}
-.prop p{margin-top:2mm;font-size:10.5px;line-height:1.62;color:var(--navy-500)}
-
-/* --------------------------------------------------------------- levels */
-.levels{
-  display:flex;align-items:center;gap:9mm;
-  margin:11mm 16mm 0;padding:6mm 7mm;
-  background:var(--wash);
+/* ------------------------------------------------------------ spec list
+   Heading left, detail right, separated by hairlines. Deliberately a
+   different rhythm from the timeline further down. */
+.specs{margin:10mm 16mm 0;border-top:1px solid var(--rule)}
+.spec{
+  display:grid;grid-template-columns:50mm 1fr;gap:8mm;
+  padding:4.5mm 0;border-bottom:1px solid var(--rule);
 }
-.levels .label{
-  flex:none;
-  font-size:8.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--navy-300);
-}
-.levels ul{list-style:none;display:flex;flex-wrap:wrap;gap:6mm;flex:1}
-.levels li{font-size:12.5px;color:var(--navy-900);letter-spacing:-.01em}
-.levels .any{flex:none;font-size:10.5px;color:var(--navy-500)}
+.spec h3{font-size:14px;letter-spacing:-.015em;line-height:1.3}
+.spec p{font-size:11px;line-height:1.68;color:var(--navy-500);max-width:104mm}
 
-/* -------------------------------------------------------------- process */
-.process{display:grid;grid-template-columns:repeat(3,1fr);gap:9mm;padding:11mm 16mm 0}
-.step{border-top:1px solid var(--rule);padding-top:4.5mm}
-.step .num{
-  font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--navy-300);
-}
-.step h3{margin-top:3mm;font-size:13.5px;letter-spacing:-.015em}
-.step p{margin-top:2mm;font-size:10.5px;line-height:1.62;color:var(--navy-500)}
-
-/* ---------------------------------------------------------- testimonial */
-.quote{margin:12mm 16mm 0;max-width:160mm}
-.quote blockquote{
+/* -------------------------------------------------------------- levels
+   Given real scale so it reads as a statement, not a grey bar. */
+.levels{margin:9mm 16mm 0}
+.levels .row{display:flex;align-items:baseline;gap:9mm;margin-top:4mm}
+.levels .set{
   font-family:"IBM Plex Serif",Georgia,serif;
-  font-size:16px;line-height:1.46;letter-spacing:-.018em;color:var(--navy-900);
+  font-size:23px;letter-spacing:-.02em;color:var(--navy-900);
 }
-.quote figcaption{margin-top:3mm;font-size:10px;color:var(--navy-300)}
+.levels .set span{color:var(--rule);margin:0 3mm}
+.levels .any{margin-top:3mm;font-size:11px;color:var(--navy-500)}
+
+/* ------------------------------------------------------------ timeline */
+.timeline{margin:10mm 16mm 0}
+.track{display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;margin-top:6mm}
+.stop{position:relative;padding-top:8mm}
+.stop .node{
+  position:absolute;top:0;left:0;width:9px;height:9px;border-radius:50%;
+  background:var(--navy-900);z-index:1;
+}
+/* the connecting line: each stop draws the segment to the one after it */
+.stop::after{
+  content:"";position:absolute;top:4px;left:9px;
+  width:calc(100% + 10mm - 9px);height:1px;background:var(--rule);
+}
+.stop:last-child::after{display:none}
+.stop .num{font-size:8.5px;font-weight:600;letter-spacing:.2em;color:var(--navy-300)}
+.stop h3{margin-top:2.5mm;font-size:14px;letter-spacing:-.015em}
+.stop p{margin-top:2.5mm;font-size:11px;line-height:1.66;color:var(--navy-500)}
 
 /* --------------------------------------------------------------- footer */
 .cta{
   margin-top:auto;background:var(--navy-900);color:var(--white);
-  padding:10mm 16mm;
-  display:flex;align-items:flex-end;justify-content:space-between;gap:10mm;
+  padding:10mm 16mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12mm;
 }
-.cta .lead{font-family:"IBM Plex Serif",Georgia,serif;font-size:20px;letter-spacing:-.02em;color:var(--white)}
-.cta .sub{margin-top:2.5mm;font-size:10.5px;line-height:1.6;color:var(--navy-200)}
-.contact{margin-top:6mm;display:flex;gap:10mm}
-.contact .label{
-  display:block;font-size:8px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--navy-300);margin-bottom:2mm;
-}
-.contact .detail{display:block;font-size:12px;color:var(--white);letter-spacing:-.01em}
-.referral{
-  flex:none;width:48mm;padding-left:7mm;border-left:1px solid rgba(255,255,255,.16);
-}
-.referral .amt{font-family:"IBM Plex Serif",Georgia,serif;font-size:30px;line-height:1;color:var(--white);letter-spacing:-.03em}
-.referral p{margin-top:3mm;font-size:10px;line-height:1.6;color:var(--navy-200)}
+.cta .lead{font-family:"IBM Plex Serif",Georgia,serif;font-size:23px;letter-spacing:-.025em;color:var(--white);line-height:1.15}
+.cta .sub{margin-top:3mm;font-size:11px;line-height:1.6;color:var(--navy-200);max-width:88mm}
+.contact{margin-top:6mm;display:flex;gap:12mm}
+.contact .label{display:block;color:var(--navy-300);margin-bottom:2.5mm}
+.contact .detail{display:block;font-size:12.5px;color:var(--white);letter-spacing:-.01em}
+.referral{flex:none;width:50mm;padding-left:8mm;border-left:1px solid rgba(255,255,255,.18)}
+.referral .amt{font-family:"IBM Plex Serif",Georgia,serif;font-size:34px;line-height:1;color:var(--white);letter-spacing:-.035em}
+.referral p{margin-top:3.5mm;font-size:10.5px;line-height:1.62;color:var(--navy-200)}
 
-/* placeholder text — replace before printing */
-.ph,.quote figcaption.ph{
-  display:inline-block;
-  color:#8FA3BC;border-bottom:1px dotted #8FA3BC;padding-bottom:1px;
-}
-
-/* ---------------------------------------------------------------- print */
 @page{size:A4;margin:0}
 @media print{
   body{background:#fff;padding:0}
@@ -148,84 +107,72 @@ h1,h2,h3,.serif{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)
 
 <p class="hint">
   A4 flier. To export: <strong>Cmd + P</strong> → <strong>Save as PDF</strong>,
-  Margins <strong>None</strong>, tick <strong>Background graphics</strong>.<br>
-  The underlined grey line is a placeholder — replace or delete it before printing.
+  Margins <strong>None</strong>, tick <strong>Background graphics</strong>.
 </p>
 
 <div class="page">
 
-  <header class="header">
-    <span class="wordmark">The Binder</span>
-    <span class="kicker">Private tutoring</span>
-  </header>
-
   <section class="hero">
-    <p class="eyebrow">Hand-matched one-to-one tutoring</p>
+    <p class="label">One-to-one tutoring</p>
     <h1>Tutors who’ve just<br>sat these exams.</h1>
     <p class="lede">
-      We’ll match you with an outstanding student from a leading university or school —
-      someone with the grades to prove it, who sat the same papers recently and still
-      remembers exactly what the examiners were looking for.
+      Your tutor will be a current student at a leading university or school, with top grades
+      in the subject they teach. They sat the same papers a year or two ago. They still
+      remember what the examiner was actually looking for.
     </p>
   </section>
 
-  <section class="props">
-    <div class="prop">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M2 8.5 12 4l10 4.5-10 4.5z"/><path d="M6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/>
-      </svg>
-      <h3>Taught by high achievers</h3>
-      <p>Tutors from leading universities and schools, chosen for their results and for how clearly they explain them.</p>
+  <section class="specs">
+    <div class="spec">
+      <h3>Chosen on results</h3>
+      <p>Grades first, then whether they can explain the thing to someone who is properly stuck. Both matter, and the second one is rarer.</p>
     </div>
-    <div class="prop">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
-      </svg>
-      <h3>Fresh from the syllabus</h3>
-      <p>They studied the specification your child is studying now, so nothing is half-remembered from a syllabus since changed.</p>
+    <div class="spec">
+      <h3>On the current spec</h3>
+      <p>They studied the specification your child is sitting now, not one that has since been rewritten. Same board, same papers, same mark schemes.</p>
     </div>
-    <div class="prop">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>
-      </svg>
-      <h3>Matched by hand</h3>
-      <p>Every enquiry is read by a person and every tutor chosen deliberately. Lessons are always one to one.</p>
+    <div class="spec">
+      <h3>Matched by a person</h3>
+      <p>We read every enquiry and choose the tutor ourselves. No database to search, no shortlist to work through, no rotating pool.</p>
     </div>
   </section>
 
   <section class="levels">
-    <span class="label">Levels</span>
-    <ul><li>11+</li><li>KS3</li><li>IB</li><li>A Level</li></ul>
-    <span class="any">Any subject — do ask, and we’ll see what we can do.</span>
+    <p class="label">Levels</p>
+    <div class="row">
+      <p class="set">11+ <span>/</span> KS3 <span>/</span> IB <span>/</span> A&nbsp;Level</p>
+    </div>
+    <p class="any">Any subject. Ask us and we will see what we can do.</p>
   </section>
 
-  <section class="process">
-    <div class="step">
-      <p class="num">01</p>
-      <h3>Get in touch</h3>
-      <p>Tell us the level, the subject and what’s proving difficult. A short message is plenty.</p>
-    </div>
-    <div class="step">
-      <p class="num">02</p>
-      <h3>We find your tutor</h3>
-      <p>We choose someone whose own results and subject fit exactly what you’re after.</p>
-    </div>
-    <div class="step">
-      <p class="num">03</p>
-      <h3>Begin lessons</h3>
-      <p>One to one, online or in person, at times that work around school.</p>
+  <section class="timeline">
+    <p class="label">How it works</p>
+    <div class="track">
+      <div class="stop">
+        <span class="node"></span>
+        <p class="num">01</p>
+        <h3>You get in touch</h3>
+        <p>Tell us the level, the subject, and what is going wrong. A couple of lines is plenty.</p>
+      </div>
+      <div class="stop">
+        <span class="node"></span>
+        <p class="num">02</p>
+        <h3>We find the tutor</h3>
+        <p>Usually within a day or two. We tell you who they are and why we picked them.</p>
+      </div>
+      <div class="stop">
+        <span class="node"></span>
+        <p class="num">03</p>
+        <h3>Lessons begin</h3>
+        <p>Online or in person, one to one, at a time that fits around school.</p>
+      </div>
     </div>
   </section>
-
-  <figure class="quote">
-    <blockquote>“Two grades in five months. But the real change is that she’ll now start a past paper without being asked.”</blockquote>
-    <figcaption class="ph">Replace with a real quote — parent name, subject and level</figcaption>
-  </figure>
 
   <section class="cta">
     <div>
-      <p class="lead">Tell us what you need</p>
-      <p class="sub">No fee to enquire, and no fee to be matched. Every enquiry gets a personal reply.</p>
+      <p class="lead">Tell us what you need.</p>
+      <p class="sub">Nothing to pay to enquire, and nothing to pay to be matched. Every message gets a proper reply.</p>
       <div class="contact">
         <div><span class="label">Email</span><span class="detail">vansch.agrawal@gmail.com</span></div>
         <div><span class="label">Call or message</span><span class="detail">+44 7493 017655</span></div>
@@ -233,7 +180,7 @@ h1,h2,h3,.serif{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)
     </div>
     <aside class="referral">
       <p class="amt">10%</p>
-      <p>Recommend us to a friend and we’ll pass you 10% of their first lesson.</p>
+      <p>Send a friend our way and we will pass you 10% of their first lesson.</p>
     </aside>
   </section>
 
