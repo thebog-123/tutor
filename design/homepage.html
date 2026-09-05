@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Binder — homepage mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  /* Design tokens — mirrors tailwind.config.ts in the app. Keep in step. */
+  tailwind.config.ts exactly. Keep them in step: the whole
+   * point of the mockups is that agreed markup can be lifted into the real app
+   * without re-deciding colours, fonts or spacing.
+   */
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper:   { 50:"#FDFBF6", 100:"#F8F3E9", 200:"#F1E9DA", 300:"#E5DAC5", 400:"#D4C5A8" },
+          ink:     { 900:"#141F33", 800:"#1B2A41", 700:"#26385A", 600:"#35507C", 500:"#4E6489", 400:"#7386A6", 300:"#9FADC4" },
+          sage:    { 700:"#3E5646", 600:"#4F6B58", 500:"#6E8C74", 400:"#93AE98", 200:"#C8D8CB", 100:"#E2ECE3" },
+          mustard: { 700:"#96691C", 600:"#B8842A", 500:"#D6A03C", 400:"#E4BC6B", 200:"#F2DFB2", 100:"#F9EFD6" },
+          clay:    { 600:"#A5563F", 500:"#C06A50", 100:"#F6E2DB" },
+        },
+        fontFamily: {
+          serif: ['"IBM Plex Serif"', "Georgia", "serif"],
+          sans:  ['"IBM Plex Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+        boxShadow: {
+          card: "0 1px 2px rgba(20,31,51,.04), 0 8px 24px -12px rgba(20,31,51,.16)",
+          lift: "0 2px 4px rgba(20,31,51,.06), 0 16px 40px -16px rgba(20,31,51,.24)",
+        },
+        borderRadius: { card: "14px" },
+      },
+    },
+  };
+</script>
+<style>
+  body { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+  h1,h2,h3 { font-family: "IBM Plex Serif", Georgia, serif; }
+  .paper-grain {
+    background-image: radial-gradient(circle at 1px 1px, rgba(20,31,51,.035) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  ::selection { background: #F2DFB2; color: #141F33; }
+</style>
+</head>
+<body class="bg-paper-100 text-ink-800 antialiased">
+<div class="paper-grain min-h-screen">
+
+  <!-- ============================================================ nav -->
+  <header class="sticky top-0 z-30 border-b border-paper-300/70 bg-paper-100/90 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+      <a href="#" class="rounded">
+        <span class="font-serif text-xl tracking-tight text-ink-900">The Binder</span>
+        <span class="ml-2 hidden text-xs uppercase tracking-[0.2em] text-mustard-600 sm:inline">Tutoring</span>
+      </a>
+      <nav class="flex items-center gap-2 sm:gap-4">
+        <a href="#subjects" class="hidden rounded px-2 py-1 text-sm text-ink-600 hover:text-ink-900 sm:inline">Subjects</a>
+        <a href="#tutors" class="hidden rounded px-2 py-1 text-sm text-ink-600 hover:text-ink-900 sm:inline">Tutors</a>
+        <a href="#enquire" class="hidden rounded px-2 py-1 text-sm text-ink-600 hover:text-ink-900 sm:inline">Enquire</a>
+        <a href="#" class="inline-flex items-center rounded-lg border border-paper-300 bg-paper-50 px-3 py-1.5 text-xs font-semibold text-ink-700 transition hover:border-ink-300 hover:bg-paper-100">Log in</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================================================== hero -->
+    <section class="mx-auto max-w-6xl px-5 pb-16 pt-14 sm:pt-20">
+      <div class="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <span class="inline-flex items-center gap-1 rounded-full border border-sage-200 bg-sage-100 px-2.5 py-0.5 text-xs font-semibold text-sage-700">Hand-matched private tutoring</span>
+          <h1 class="mt-5 font-serif text-4xl leading-[1.1] text-ink-900 sm:text-5xl lg:text-6xl">
+            Every lesson, note and question — kept in one binder.
+          </h1>
+          <p class="mt-5 max-w-xl text-base leading-relaxed text-ink-600 sm:text-lg">
+            We match students with specialist tutors by hand, then give both of them a portal
+            where the work actually lives: lesson notes after every session, questions answered
+            between them, and a schedule nobody has to chase.
+          </p>
+          <div class="mt-8 flex flex-wrap gap-3">
+            <a href="#enquire" class="inline-flex items-center justify-center rounded-lg bg-ink-800 px-5 py-3 text-base font-semibold text-paper-50 transition hover:bg-ink-900">Enquire about a tutor</a>
+            <a href="#how" class="inline-flex items-center justify-center rounded-lg border border-paper-300 bg-paper-50 px-5 py-3 text-base font-semibold text-ink-700 transition hover:border-ink-300 hover:bg-paper-100">How it works</a>
+          </div>
+          <dl class="mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-paper-300 pt-6">
+            <div><dd><span class="block font-serif text-2xl text-ink-900">1 : 1</span><span class="mt-0.5 block text-xs text-ink-400">Every session</span></dd></div>
+            <div><dd><span class="block font-serif text-2xl text-ink-900">48 hrs</span><span class="mt-0.5 block text-xs text-ink-400">Typical match time</span></dd></div>
+            <div><dd><span class="block font-serif text-2xl text-ink-900">No</span><span class="mt-0.5 block text-xs text-ink-400">Sign-up fees</span></dd></div>
+          </dl>
+        </div>
+
+        <!-- stylised binder card stack -->
+        <div class="relative mx-auto w-full max-w-md lg:mx-0">
+          <div class="absolute -left-3 top-5 hidden h-full w-full rounded-card border border-paper-300 bg-paper-200 sm:block"></div>
+          <div class="absolute -left-1.5 top-2.5 hidden h-full w-full rounded-card border border-paper-300 bg-paper-50 sm:block"></div>
+          <div class="relative rounded-card border border-paper-300 bg-paper-50 p-6 shadow-lift">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Tuesday · 17:30</p>
+              <span class="inline-flex items-center rounded-full border border-mustard-200 bg-mustard-100 px-2.5 py-0.5 text-xs font-semibold text-mustard-700">Upcoming</span>
+            </div>
+            <h3 class="mt-3 font-serif text-xl text-ink-900">Quadratic inequalities &amp; sketching</h3>
+            <p class="mt-1 text-sm text-ink-500">A Level Maths · with Dr Alice Nwosu</p>
+            <div class="mt-5 space-y-3 border-t border-paper-200 pt-5">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-ink-800">Lesson notes</span>
+                <span class="inline-flex items-center rounded-full border border-sage-200 bg-sage-100 px-2.5 py-0.5 text-xs font-semibold text-sage-700">Uploaded 4 Sept</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-ink-800">Open question</span>
+                <span class="inline-flex items-center rounded-full border border-mustard-200 bg-mustard-100 px-2.5 py-0.5 text-xs font-semibold text-mustard-700">Answered · 2 hrs ago</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-ink-800">September invoice</span>
+                <span class="inline-flex items-center rounded-full border border-sage-200 bg-sage-100 px-2.5 py-0.5 text-xs font-semibold text-sage-700">Paid</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================================================== subjects -->
+    <section id="subjects" class="border-y border-paper-300 bg-paper-50">
+      <div class="mx-auto max-w-6xl px-5 py-16">
+        <h2 class="font-serif text-3xl text-ink-900">Subjects &amp; levels</h2>
+        <p class="mt-2 max-w-2xl text-ink-600">Our tutors are subject specialists — most are postgraduates or practising teachers in the subject they tutor.</p>
+        <ul class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Mathematics</p><p class="mt-1 text-xs text-ink-500">KS3 · GCSE · A Level · STEP</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Physics</p><p class="mt-1 text-xs text-ink-500">GCSE · A Level · IB</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Chemistry</p><p class="mt-1 text-xs text-ink-500">GCSE · A Level</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Biology</p><p class="mt-1 text-xs text-ink-500">GCSE · A Level</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">English Literature</p><p class="mt-1 text-xs text-ink-500">KS3 · GCSE · A Level</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">History</p><p class="mt-1 text-xs text-ink-500">GCSE · A Level</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Computer Science</p><p class="mt-1 text-xs text-ink-500">GCSE · A Level</p></li>
+          <li class="rounded-card border border-paper-300 bg-paper-100 px-4 py-4 transition hover:border-sage-400 hover:bg-sage-100/40"><p class="font-serif text-lg text-ink-900">Admissions</p><p class="mt-1 text-xs text-ink-500">11+ · Oxbridge · UCAT</p></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================================================ how it works -->
+    <section id="how" class="mx-auto max-w-6xl px-5 py-16">
+      <h2 class="font-serif text-3xl text-ink-900">How it works</h2>
+      <div class="mt-8 grid gap-6 md:grid-cols-3">
+        <div class="rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <span class="font-serif text-sm font-semibold text-mustard-600">01</span>
+          <h3 class="mt-2 font-serif text-xl text-ink-900">Send an enquiry</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-600">Tell us the subject, level and exam board, plus anything the student is finding hard. It takes two minutes.</p>
+        </div>
+        <div class="rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <span class="font-serif text-sm font-semibold text-mustard-600">02</span>
+          <h3 class="mt-2 font-serif text-xl text-ink-900">We match you</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-600">The agency reads every enquiry by hand and pairs the student with a specialist tutor — no algorithm, no marketplace.</p>
+        </div>
+        <div class="rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <span class="font-serif text-sm font-semibold text-mustard-600">03</span>
+          <h3 class="mt-2 font-serif text-xl text-ink-900">Work in the portal</h3>
+          <p class="mt-2 text-sm leading-relaxed text-ink-600">Lessons, notes, questions between sessions and invoices all live in one place, for the student and the tutor alike.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================== tutors -->
+    <section id="tutors" class="border-y border-paper-300 bg-sage-100/40">
+      <div class="mx-auto max-w-6xl px-5 py-16">
+        <h2 class="font-serif text-3xl text-ink-900">Meet some of our tutors</h2>
+        <p class="mt-2 max-w-2xl text-ink-600">You'll be introduced to one tutor, chosen for the student — not handed a list to sift through.</p>
+        <ul class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-mustard-100 font-serif text-base font-semibold text-mustard-700">AN</span>
+              <div class="min-w-0"><p class="truncate font-serif text-lg text-ink-900">Dr Alice Nwosu</p><p class="truncate text-xs text-ink-500">A Level Physics &amp; Maths</p></div>
+            </div>
+            <p class="mt-4 font-serif text-sm text-sage-700">Ten years of A Level Physics, and a habit of making mechanics click.</p>
+            <p class="mt-2 flex-1 text-sm leading-relaxed text-ink-600">Physics PhD and former head of department. I teach from past papers backwards — we work out what the examiner wants, then build the technique to give it to them.</p>
+            <p class="mt-4 border-t border-paper-200 pt-3 text-xs text-ink-400">10 years tutoring</p>
+          </li>
+          <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-mustard-100 font-serif text-base font-semibold text-mustard-700">MB</span>
+              <div class="min-w-0"><p class="truncate font-serif text-lg text-ink-900">Marcus Bell</p><p class="truncate text-xs text-ink-500">GCSE &amp; A Level Maths</p></div>
+            </div>
+            <p class="mt-4 font-serif text-sm text-sage-700">For students who've decided they're 'not a maths person'.</p>
+            <p class="mt-2 flex-1 text-sm leading-relaxed text-ink-600">Fifteen years teaching secondary maths, most of it with students who arrived convinced they couldn't do it. Patient, structured, and relentless about showing working.</p>
+            <p class="mt-4 border-t border-paper-200 pt-3 text-xs text-ink-400">15 years tutoring</p>
+          </li>
+          <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-mustard-100 font-serif text-base font-semibold text-mustard-700">SR</span>
+              <div class="min-w-0"><p class="truncate font-serif text-lg text-ink-900">Sofia Reyes</p><p class="truncate text-xs text-ink-500">English Literature &amp; Admissions</p></div>
+            </div>
+            <p class="mt-4 font-serif text-sm text-sage-700">Essays that argue something, and personal statements that sound human.</p>
+            <p class="mt-2 flex-1 text-sm leading-relaxed text-ink-600">Cambridge English graduate and admissions interviewer. I work on structure first: what is the argument, and does every paragraph earn its place?</p>
+            <p class="mt-4 border-t border-paper-200 pt-3 text-xs text-ink-400">7 years tutoring</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================================================ testimonials -->
+    <section class="mx-auto max-w-6xl px-5 py-16">
+      <h2 class="font-serif text-3xl text-ink-900">What families say</h2>
+      <ul class="mt-8 grid gap-6 md:grid-cols-3">
+        <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <p class="flex-1 font-serif text-base leading-relaxed text-ink-800">&ldquo;Two grades in five months, but the real change is that she'll now sit down and start a past paper without being asked.&rdquo;</p>
+          <div class="mt-5 border-t border-paper-200 pt-4"><p class="text-sm font-semibold text-ink-800">Priya R.</p><p class="text-xs text-ink-400">Parent · A Level Chemistry</p></div>
+        </li>
+        <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <p class="flex-1 font-serif text-base leading-relaxed text-ink-800">&ldquo;Being able to read back the notes from every lesson before a mock was the thing that actually made the difference.&rdquo;</p>
+          <div class="mt-5 border-t border-paper-200 pt-4"><p class="text-sm font-semibold text-ink-800">Tom H.</p><p class="text-xs text-ink-400">Student · GCSE Maths</p></div>
+        </li>
+        <li class="flex h-full flex-col rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card">
+          <p class="flex-1 font-serif text-base leading-relaxed text-ink-800">&ldquo;As a tutor, having the notes, the questions and the invoicing in one binder means I spend my time teaching.&rdquo;</p>
+          <div class="mt-5 border-t border-paper-200 pt-4"><p class="text-sm font-semibold text-ink-800">Dr Alice Nwosu</p><p class="text-xs text-ink-400">Tutor · Physics</p></div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== enquire -->
+    <section id="enquire" class="border-t border-paper-300 bg-paper-50">
+      <div class="mx-auto grid max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <h2 class="font-serif text-3xl text-ink-900">Enquire</h2>
+          <p class="mt-3 max-w-md leading-relaxed text-ink-600">Tell us what you need and the agency will reply personally. There's no self-signup — we create your portal account once we've matched you with a tutor.</p>
+          <ul class="mt-6 space-y-3 text-sm text-ink-600">
+            <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-mustard-500"></span>No fees to enquire or to be matched</li>
+            <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-mustard-500"></span>A named tutor, not a rotating pool</li>
+            <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-mustard-500"></span>Portal access for the student and the parent</li>
+            <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-mustard-500"></span>Referred by someone? They earn 10% of your first lesson</li>
+          </ul>
+        </div>
+        <div class="rounded-card border border-paper-300 bg-paper-50 p-6 shadow-card sm:p-8">
+          <form class="space-y-4" onsubmit="event.preventDefault(); alert('Mockup only — the real form posts to the database.');">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Your name</label><input class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></div>
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Email address</label><input type="email" class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">I'm enquiring as</label><select class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"><option>A parent or student</option><option>A prospective tutor</option></select></div>
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Subject &amp; level</label><input placeholder="e.g. GCSE Maths" class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Who referred you? <span class="font-normal normal-case tracking-normal">(optional)</span></label><input placeholder="Their name" class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></div>
+              <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Referral code <span class="font-normal normal-case tracking-normal">(optional)</span></label><input placeholder="e.g. K7PQ2M" class="mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 font-mono text-sm uppercase tracking-widest text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></div>
+            </div>
+            <div><label class="block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500">Message</label><textarea rows="5" placeholder="Tell us about the student, the exam board, and what you're hoping to work on." class="mt-1.5 w-full resize-y rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200"></textarea></div>
+            <div class="flex flex-wrap items-center gap-3 pt-1">
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-mustard-500 px-5 py-3 text-base font-semibold text-ink-900 transition hover:bg-mustard-600">Send enquiry</button>
+              <p class="text-xs text-ink-400">We only use these details to reply to your enquiry.</p>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================================================= footer -->
+  <footer class="border-t border-paper-300 bg-ink-900">
+    <div class="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-10 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p class="font-serif text-lg text-paper-50">The Binder</p>
+        <p class="mt-1 text-sm text-ink-300">© 2026 The Binder Tutoring. All rights reserved.</p>
+      </div>
+      <div class="flex gap-5 text-sm">
+        <a href="#" class="rounded text-paper-200 hover:text-paper-50">Portal login</a>
+        <a href="#" class="rounded text-ink-300 hover:text-paper-50">Agency admin</a>
+      </div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
