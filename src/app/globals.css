@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper-100 text-ink-800 font-sans antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-serif text-ink-900;
+    font-feature-settings: "kern" 1;
+  }
+
+  /* Subtle paper grain on the marketing surface. */
+  .paper-grain {
+    background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(20, 31, 51, 0.035) 1px,
+        transparent 0
+      );
+    background-size: 22px 22px;
+  }
+
+  ::selection {
+    @apply bg-mustard-200 text-ink-900;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-[0.08em] text-ink-500;
+  }
+
+  .field-input {
+    @apply mt-1.5 w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-sm text-ink-900
+      placeholder:text-ink-300 focus:border-sage-500 focus:outline-none focus:ring-2 focus:ring-sage-200
+      disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .prose-note {
+    @apply text-sm leading-relaxed text-ink-600;
+  }
+}
+
+@layer utilities {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 focus-visible:ring-offset-2 focus-visible:ring-offset-paper-100;
+  }
+}
