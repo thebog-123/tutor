@@ -6,7 +6,7 @@
 <title>Tutoring — A4 flier</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..600&family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..700,0..100,0..1&display=swap" rel="stylesheet">
 <style>
 :root{
   --navy-900:#0A1A2F; --navy-700:#14304F; --navy-500:#33506F;
@@ -16,7 +16,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 
 body{
-  background:#4A5462;font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  background:#4A5462;font-family:"DM Sans",ui-sans-serif,system-ui,sans-serif;
   color:var(--navy-500);-webkit-font-smoothing:antialiased;padding:32px 16px;
 }
 .hint{max-width:210mm;margin:0 auto 20px;color:#E4E7EB;font-size:13px;line-height:1.6;text-align:center}
@@ -27,14 +27,20 @@ body{
   display:flex;flex-direction:column;overflow:hidden;
   box-shadow:0 24px 70px rgba(0,0,0,.45);
 }
-h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
+h1,h2,h3,.serif{
+  font-family:"Fraunces","Iowan Old Style",Georgia,serif;
+  font-optical-sizing:none;
+  font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;
+  font-weight:600;
+  color:var(--navy-900);
+}
 .label{font-size:8.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--navy-300)}
 
 /* ----------------------------------------------------------------- hero
    Asymmetric on purpose: the headline runs wide, the standfirst sits in a
    narrower measure beneath it rather than matching its width. */
 .hero{padding:14mm 16mm 0}
-.hero h1{margin-top:5mm;font-size:44px;line-height:1.04;letter-spacing:-.034em}
+.hero h1{margin-top:5mm;font-size:41px;line-height:1.08;letter-spacing:-.022em}
 .hero .lede{
   margin-top:5mm;max-width:118mm;
   font-size:13px;line-height:1.7;color:var(--navy-500);
@@ -56,7 +62,8 @@ h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
 .levels{margin:9mm 16mm 0}
 .levels .row{display:flex;align-items:baseline;gap:9mm;margin-top:4mm}
 .levels .set{
-  font-family:"IBM Plex Serif",Georgia,serif;
+  font-family:"Fraunces","Iowan Old Style",Georgia,serif;
+  font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;
   font-size:23px;letter-spacing:-.02em;color:var(--navy-900);
 }
 .levels .set span{color:var(--rule);margin:0 3mm}
@@ -85,13 +92,13 @@ h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
   margin-top:auto;background:var(--navy-900);color:var(--white);
   padding:10mm 16mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12mm;
 }
-.cta .lead{font-family:"IBM Plex Serif",Georgia,serif;font-size:23px;letter-spacing:-.025em;color:var(--white);line-height:1.15}
+.cta .lead{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;font-size:23px;letter-spacing:-.025em;color:var(--white);line-height:1.15}
 .cta .sub{margin-top:3mm;font-size:11px;line-height:1.6;color:var(--navy-200);max-width:88mm}
 .contact{margin-top:6mm;display:flex;gap:12mm}
 .contact .label{display:block;color:var(--navy-300);margin-bottom:2.5mm}
 .contact .detail{display:block;font-size:12.5px;color:var(--white);letter-spacing:-.01em}
 .referral{flex:none;width:50mm;padding-left:8mm;border-left:1px solid rgba(255,255,255,.18)}
-.referral .amt{font-family:"IBM Plex Serif",Georgia,serif;font-size:34px;line-height:1;color:var(--white);letter-spacing:-.035em}
+.referral .amt{font-family:"Fraunces","Iowan Old Style",Georgia,serif;font-optical-sizing:none;font-variation-settings:"opsz" 20,"SOFT" 90,"WONK" 1;font-weight:600;font-size:34px;line-height:1;color:var(--white);letter-spacing:-.035em}
 .referral p{margin-top:3.5mm;font-size:10.5px;line-height:1.62;color:var(--navy-200)}
 
 @page{size:A4;margin:0}
@@ -113,12 +120,12 @@ h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
 <div class="page">
 
   <section class="hero">
-    <p class="label">One-to-one tutoring</p>
+    <p class="label">One-to-one online tutoring</p>
     <h1>Tutors who’ve just<br>sat these exams.</h1>
     <p class="lede">
-      Your tutor will be a current student at a leading university or school, with top grades
-      in the subject they teach. They sat the same papers a year or two ago. They still
-      remember what the examiner was actually looking for.
+      Every lesson is one to one and online. Your tutor will be a current student at a leading
+      university or school, with top grades in the subject they teach. They sat the same papers
+      a year or two ago, so they still remember what the examiner was actually looking for.
     </p>
   </section>
 
@@ -164,7 +171,7 @@ h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;color:var(--navy-900)}
         <span class="node"></span>
         <p class="num">03</p>
         <h3>Lessons begin</h3>
-        <p>Online or in person, one to one, at a time that fits around school.</p>
+        <p>One to one and online, at a time in the week that fits around school.</p>
       </div>
     </div>
   </section>
