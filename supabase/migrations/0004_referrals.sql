@@ -10,9 +10,17 @@ exception when duplicate_object then null; end $$;
 
 alter table public.users add column if not exists referral_code text;
 
+-- Adding a unique constraint creates an index of the same name, so a re-run
+-- raises duplicate_table rather than duplicate_object. Check for it instead.
 do $$ begin
-  alter table public.users add constraint users_referral_code_key unique (referral_code);
-exception when duplicate_object then null; end $$;
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.users'::regclass
+       and conname = 'users_referral_code_key'
+  ) then
+    alter table public.users add constraint users_referral_code_key unique (referral_code);
+  end if;
+end $$;
 
 -- Six characters, no O/0/I/1, so a code survives being read out loud.
 create or replace function public.generate_referral_code()

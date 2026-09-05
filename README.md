@@ -71,6 +71,9 @@ project, and wait for it to finish provisioning.
 In the Supabase dashboard, open **SQL Editor** and run the three files in
 `supabase/migrations/` **in order**:
 
+Or paste **`supabase/setup.sql`** — all four concatenated in order — into the
+SQL Editor in one go. It is safe to re-run.
+
 1. `0001_schema.sql` — tables, enums, indexes
 2. `0002_rls.sql` — identity helpers, guard triggers, row level security,
    and the public tutor view
