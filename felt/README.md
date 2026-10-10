@@ -107,8 +107,10 @@ These steps need your own accounts, so you have to do them yourself.
    add `claude/youthful-lamport-64uutg` (GitHub only lets the default branch
    deploy until you do). Alternatively, merge this branch into your default
    branch.
-4. **Actions → Felt website → Run workflow** (pick the
-   `claude/youthful-lamport-64uutg` branch). When it goes green, the site is live at
+4. **Actions → Felt website →** open the most recent run → **Re-run all jobs**.
+   (The workflow also runs by itself whenever anything in `felt/` is pushed. The
+   **Run workflow** button only appears once the workflow is on your default
+   branch.) When both jobs are green, the site is live at
    **https://thebog-123.github.io/tutor/**.
 
 If the site says "Felt isn't connected to a database yet", one of the two
