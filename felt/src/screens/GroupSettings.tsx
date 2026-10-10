@@ -566,6 +566,7 @@ function LeaveSection() {
   const g = useGroup();
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState(g.group.name);
   const toast = useToast();
   return (
@@ -580,7 +581,37 @@ function LeaveSection() {
         <button className="btn danger" onClick={() => setOpen(true)}>
           Leave group
         </button>
+        {g.me.isAdmin && !g.group.is_sample && (
+          <button className="btn danger" onClick={() => setDeleting(true)}>
+            Delete group
+          </button>
+        )}
       </div>
+      {deleting && (
+        <Confirm
+          title={`Delete ${g.group.name}?`}
+          confirmLabel="Delete group"
+          tone="danger"
+          requireText="DELETE"
+          onClose={() => setDeleting(false)}
+          onConfirm={async () => {
+            await rpc('delete_group', { p_group: g.group.id, p_confirm: 'DELETE' });
+            try {
+              localStorage.removeItem('felt.lastGroup');
+            } catch {
+              /* ignore */
+            }
+            navigate('/groups', true);
+          }}
+        >
+          <Banner tone="error">
+            This permanently deletes the group for everyone: all players, games, payments and the activity log. It can't be undone.
+          </Banner>
+          <p className="muted small">
+            Want a copy first? Close this and use <b>Admin tools → JSON backup</b> above.
+          </p>
+        </Confirm>
+      )}
       {renaming && (
         <Sheet title="Rename group" onClose={() => setRenaming(false)}>
           <form

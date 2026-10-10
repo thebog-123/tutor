@@ -153,7 +153,11 @@ it, or an admin, taps **End game** once everyone has cashed out.
 bank transfer or cash. Then the payer taps **I've paid** and the person paid
 taps **Yes, I received this** (or the other way round).
 
-To stop new people joining, an admin can tap **Replace link** on the Group tab.
+To stop new people joining, an admin can tap **Replace link** on the Group page.
+
+To delete a group (for example a test one), an admin opens **You → Group & invites**,
+scrolls to **This group**, taps **Delete group** and types `DELETE`. This removes it
+for everyone and can't be undone, so download a JSON backup first if you might want it.
 
 ## Development
 

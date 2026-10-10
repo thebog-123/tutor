@@ -126,3 +126,24 @@ suite('profile pictures', () => {
     expect((await ok(bea.from('profiles').select('avatar_url').eq('id', annId)))[0].avatar_url).toBeNull();
   });
 });
+
+suite('deleting a group', () => {
+  it('lets only an admin delete a whole group, after typing DELETE', async () => {
+    const [ann, bea] = await Promise.all([newUser('del-a'), newUser('del-b')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Test group', p_player_names: ['A', 'B'], p_claim_index: 1 }));
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    const players = await ok(ann.from('players').select('id').eq('group_id', groupId));
+    const d = await ok(ann.rpc('save_game_draft', {
+      p_group: groupId, p_game: null, p_expected_version: null, p_name: 'g', p_played_on: '2026-10-01', p_notes: '',
+      p_entries: players.map((p: { id: string }, i: number) => ({ player_id: p.id, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: i ? 0 : 2000 })),
+    }));
+    await ok(ann.rpc('finalise_game', { p_game: d.id, p_expected_version: d.version }));
+    await fails(bea.rpc('delete_group', { p_group: groupId, p_confirm: 'DELETE' }), 'FT403');
+    await fails(ann.rpc('delete_group', { p_group: groupId, p_confirm: 'yes' }), 'FT422');
+    await ok(ann.rpc('delete_group', { p_group: groupId, p_confirm: 'delete' }));
+    expect(await ok(ann.from('groups').select('id').eq('id', groupId))).toEqual([]);
+    expect(await ok(bea.from('group_members').select('group_id').eq('group_id', groupId))).toEqual([]);
+    await fails(ann.rpc('get_balances', { p_group: groupId }), 'FT403');
+  });
+});

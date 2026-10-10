@@ -1201,7 +1201,24 @@ begin
   return v_group;
 end $$;
 
--- Only sample groups can be deleted outright (real groups keep their history).
+-- An admin can delete a whole group and everything in it. The app asks them
+-- to type DELETE first; the server checks that too.
+create or replace function public.delete_group(p_group uuid, p_confirm text) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  perform _require_admin(p_group);
+  if upper(btrim(coalesce(p_confirm, ''))) <> 'DELETE' then
+    perform _fail('FT422', 'Type DELETE to confirm.');
+  end if;
+  perform _lock_group(p_group);
+  delete from payments where group_id = p_group;
+  delete from game_entries where group_id = p_group;
+  delete from games where group_id = p_group;
+  delete from players where group_id = p_group;
+  delete from groups where id = p_group;  -- members and the activity log go with it
+end $$;
+
+-- Sample groups can be deleted without typing anything.
 create or replace function public.delete_sample_group(p_group uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -1271,7 +1288,7 @@ grant execute on function
   public.get_balances(uuid), public.record_payment(uuid, uuid, uuid, integer, text, uuid),
   public.confirm_payment(uuid), public.cancel_payment(uuid, text),
   public.export_backup(uuid), public.restore_backup(uuid, jsonb),
-  public.create_sample_group(), public.delete_sample_group(uuid)
+  public.create_sample_group(), public.delete_sample_group(uuid), public.delete_group(uuid, text)
 to authenticated;
 -- RLS policies call these helpers as the signed-in user.
 grant execute on function public._is_member(uuid), public._is_admin(uuid), public._shares_group(uuid) to authenticated;
