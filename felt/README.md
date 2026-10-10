@@ -12,14 +12,23 @@ money. It only records what happened.
   rebuys, and cash-outs. Amounts are stored as whole pennies. A live check shows
   whether cash-outs equal buy-ins plus rebuys, plus each player's profit or loss
   before you submit. Any member can submit a draft; only an admin can finalise it.
-- **Leaderboard.** Ranks players by total profit, with games played, winning
-  sessions, win % and average per game, for all time, this year or this month.
+- **Live games.** Start a game at the table and everyone follows it on their own
+  phone, updating in real time: join, rebuy, or cash out early when you leave. Each
+  tap changes only one player's row, so phones updating together never overwrite each
+  other. When the game ends it becomes a draft, or is finalised straight away if
+  an admin ends it and the numbers balance.
+- **Leaderboard.** Each group has its own leaderboard: a podium with medals for the
+  top three, then everyone ranked. Sort by profit, average per game, win %, wins
+  or games played, in either direction, for all time, this year or this month.
   It only counts finalised games, so paying a debt never changes the rankings.
+- **You.** Your profile picture, your stats (rank, streaks, best and worst night,
+  game by game), pending actions with a badge count, and your settlements.
 - **Who owes whom.** Shows balances from finalised games and confirmed payments,
   and suggests the fewest transfers to settle up ("Dev pays Alice £20"). Partial
-  payments are allowed. Members can say they've paid; an admin confirms once
-  they've checked the money arrived. Every payment shows who recorded and who
-  confirmed it, and when.
+  payments are allowed. A payment counts only once **both** people confirm it:
+  the one who paid and the one who was paid. Recording it confirms your own side.
+  Admins aren't needed, except to confirm for a player who hasn't joined Felt yet.
+  Every payment shows who recorded and confirmed it, and when.
 - **Safeguards.** All permissions are enforced in the database, not just by
   hiding buttons. Repeated taps and retries can't create duplicates. If two
   people edit at once, the second is told to reload rather than silently
@@ -136,9 +145,13 @@ variables is missing or misspelled. Fix it and run the workflow again.
 buy-ins, rebuys and cash-outs until the bar says *Balanced*. Then they tap
 **Review** and **Submit draft**. An admin opens the draft and taps **Finalise**.
 
+**Live:** tap **● Start live game**. Friends open it from Home or Games and tap
+**Join**, **+ Rebuy** or **Cash out** as the night goes on. The person who started
+it, or an admin, taps **End game** once everyone has cashed out.
+
 **Settling up:** the **Payments** tab lists who pays whom. Pay each other by
-bank transfer or cash. Then the payer taps **Paid?** and an admin taps
-**Confirm received**, or an admin taps **Record** directly.
+bank transfer or cash. Then the payer taps **I've paid** and the person paid
+taps **Yes, I received this** (or the other way round).
 
 To stop new people joining, an admin can tap **Replace link** on the Group tab.
 
@@ -151,7 +164,7 @@ npm run test:unit                    # money, settle-up, leaderboard, CSV and ba
 
 # Full database tests need Postgres 16 binaries and Docker (Linux):
 npm run stack:start                  # local Auth + PostgREST + Postgres on :54321
-npm run test:db                      # 24 tests: permissions, balances, races, backups
+npm run test:db                      # permissions, balances, payments, live games, races, backups
 npm run stack:stop
 
 # Run the site locally against Supabase (hosted or local)
@@ -163,6 +176,12 @@ npm run dev
 `e2e/flow.mjs` is a browser walkthrough (two people sign up, join, record and
 finalise a game, then make and confirm a part payment). It runs against a
 `vite preview` of the build with `dist/config.js` pointing at the local stack.
+
+## Updating the database after a Felt update
+
+When a new version of Felt changes `supabase/schema.sql`, open Supabase → **SQL
+Editor** → **New query**, paste the whole file and **Run**. It's written to be run
+again safely: existing groups, games and payments are kept.
 
 ## Restoring a paused project, backups
 

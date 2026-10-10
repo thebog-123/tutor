@@ -28,6 +28,10 @@ create table if not exists public.profiles (
   created_at   timestamptz not null default now()
 );
 alter table public.profiles enable row level security;
+-- Profile picture: a small square JPEG/WebP/PNG made in the browser, stored
+-- inline as a data URL (about 10-30 KB). Visible only to people who share a group.
+alter table public.profiles add column if not exists avatar_url text
+  check (avatar_url is null or (char_length(avatar_url) <= 200000 and avatar_url ~ '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$'));
 
 create table if not exists public.groups (
   id          uuid primary key default gen_random_uuid(),
@@ -67,7 +71,7 @@ create table if not exists public.games (
   name         text not null check (char_length(btrim(name)) between 1 and 80),
   played_on    date not null,
   notes        text not null default '' check (char_length(notes) <= 500),
-  status       text not null default 'draft' check (status in ('draft', 'final', 'void')),
+  status       text not null default 'draft',
   version      integer not null default 1,
   client_token uuid unique,
   created_by   uuid references auth.users (id) on delete set null,
@@ -90,12 +94,35 @@ create table if not exists public.game_entries (
   buy_in_pence   integer not null check (buy_in_pence > 0 and buy_in_pence <= 10000000),
   rebuys_pence   integer[] not null default '{}'
                  check (cardinality(rebuys_pence) <= 50 and 0 < all (rebuys_pence) and 10000000 >= all (rebuys_pence)),
-  cash_out_pence integer not null check (cash_out_pence >= 0 and cash_out_pence <= 100000000),
+  cash_out_pence integer check (cash_out_pence >= 0 and cash_out_pence <= 100000000),
   primary key (game_id, player_id)
 );
 alter table public.game_entries enable row level security;
 create index if not exists game_entries_group_idx on public.game_entries (group_id);
 create index if not exists game_entries_player_idx on public.game_entries (player_id);
+
+-- Live games: status 'live' while the game is being played. Players join,
+-- rebuy and cash out (possibly early) from their own phones; cash_out_pence
+-- stays empty until a player leaves the table.
+alter table public.games drop constraint if exists games_status_check;
+alter table public.games add constraint games_status_check check (status in ('live', 'draft', 'final', 'void'));
+alter table public.games add column if not exists standard_buy_in_pence integer
+  check (standard_buy_in_pence is null or (standard_buy_in_pence > 0 and standard_buy_in_pence <= 10000000));
+alter table public.game_entries alter column cash_out_pence drop not null;
+alter table public.game_entries add column if not exists joined_at timestamptz not null default now();
+alter table public.game_entries add column if not exists cashed_out_at timestamptz;
+-- Outside a live game, every player must have a cash-out.
+create or replace function public._entries_complete() returns trigger
+language plpgsql as $$
+begin
+  if new.status in ('draft', 'final') and exists (select 1 from game_entries where game_id = new.id and cash_out_pence is null) then
+    raise exception using errcode = 'FT422', message = 'Every player needs a cash-out before the game can end.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists games_entries_complete on public.games;
+create trigger games_entries_complete before update of status on public.games
+  for each row when (old.status = 'live') execute function public._entries_complete();
 
 create table if not exists public.payments (
   id           uuid primary key default gen_random_uuid(),
@@ -118,6 +145,11 @@ create table if not exists public.payments (
 );
 alter table public.payments enable row level security;
 create index if not exists payments_group_idx on public.payments (group_id, recorded_at desc);
+-- Both sides confirm a payment: the payer ("I paid") and the payee ("I received it").
+alter table public.payments add column if not exists payer_confirmed_by uuid references auth.users (id) on delete set null;
+alter table public.payments add column if not exists payer_confirmed_at timestamptz;
+alter table public.payments add column if not exists payee_confirmed_by uuid references auth.users (id) on delete set null;
+alter table public.payments add column if not exists payee_confirmed_at timestamptz;
 
 create table if not exists public.audit_log (
   id         bigint generated always as identity primary key,
@@ -387,6 +419,18 @@ begin
   on conflict (id) do update set display_name = excluded.display_name;
 end $$;
 
+create or replace function public.update_my_avatar(p_image text) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_uid uuid := _uid();
+begin
+  if p_image is not null and (char_length(p_image) > 200000
+      or p_image !~ '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$') then
+    perform _fail('FT422', 'That picture could not be used. Try a different photo.');
+  end if;
+  insert into profiles (id, display_name, avatar_url) values (v_uid, 'Player', p_image)
+  on conflict (id) do update set avatar_url = excluded.avatar_url;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- Groups and membership
 -- ---------------------------------------------------------------------------
@@ -632,7 +676,7 @@ begin
   select * into v_g from games where id = p_game for update;
   if v_g.id is null then perform _fail('FT404', 'Game not found.'); end if;
   perform _require_member(v_g.group_id);
-  if v_g.status <> 'draft' then perform _fail('FT409', 'Only drafts can be deleted. Admins can void finalised games.'); end if;
+  if v_g.status not in ('draft', 'live') then perform _fail('FT409', 'Only drafts and live games can be deleted. Admins can void finalised games.'); end if;
   if v_g.created_by is distinct from auth.uid() and not _is_admin(v_g.group_id) then
     perform _fail('FT403', 'Only the person who started this draft or an admin can delete it.');
   end if;
@@ -706,6 +750,138 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- Live games. Each action changes one player's row, so phones updating at the
+-- same time never overwrite each other. Any member can run the table; every
+-- action bumps the game's version so other screens refresh.
+-- ---------------------------------------------------------------------------
+
+create or replace function public._live_game(p_game uuid) returns games
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games%rowtype;
+begin
+  select * into v_g from games where id = p_game;
+  if v_g.id is null then perform _fail('FT404', 'Game not found.'); end if;
+  perform _require_member(v_g.group_id);
+  select * into v_g from games where id = p_game for update;
+  if v_g.status <> 'live' then perform _fail('FT409', 'This game has already ended. Reload to see the latest.'); end if;
+  update games set version = version + 1, updated_by = auth.uid(), updated_at = now() where id = p_game;
+  return v_g;
+end $$;
+
+create or replace function public._entry_name(p_player uuid) returns text
+language sql stable security definer set search_path = public, pg_temp as $$
+  select name from players where id = p_player;
+$$;
+
+create or replace function public.start_live_game(
+  p_group uuid, p_name text, p_played_on date, p_standard_buy_in integer, p_players uuid[], p_client_token uuid default null)
+returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_uid uuid := _uid(); v_id uuid; v_player uuid;
+begin
+  perform _require_member(p_group);
+  if p_client_token is not null then
+    select id into v_id from games where client_token = p_client_token and group_id = p_group;
+    if v_id is not null then return v_id; end if;
+  end if;
+  if p_played_on is null or p_played_on > current_date + 1 then perform _fail('FT422', 'Pick a valid date.'); end if;
+  if p_standard_buy_in is null or p_standard_buy_in <= 0 or p_standard_buy_in > 10000000 then
+    perform _fail('FT422', 'Set the buy-in amount.');
+  end if;
+  insert into games (group_id, name, played_on, status, standard_buy_in_pence, client_token, created_by, updated_by)
+  values (p_group, _clean_text(p_name, 'Game name', 80, true), p_played_on, 'live', p_standard_buy_in, p_client_token, v_uid, v_uid)
+  returning id into v_id;
+  foreach v_player in array coalesce(p_players, '{}') loop
+    if not exists (select 1 from players where id = v_player and group_id = p_group) then
+      perform _fail('FT422', 'One of the players is not in this group.');
+    end if;
+    insert into game_entries (game_id, group_id, player_id, buy_in_pence) values (v_id, p_group, v_player, p_standard_buy_in)
+    on conflict do nothing;
+  end loop;
+  perform _audit(p_group, 'game.live_started', 'game', v_id, jsonb_build_object('name', btrim(p_name)));
+  return v_id;
+end $$;
+
+create or replace function public.live_join(p_game uuid, p_player uuid, p_buy_in integer) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games;
+begin
+  v_g := _live_game(p_game);
+  if not exists (select 1 from players where id = p_player and group_id = v_g.group_id) then
+    perform _fail('FT422', 'That player is not in this group.');
+  end if;
+  if p_buy_in is null or p_buy_in <= 0 or p_buy_in > 10000000 then perform _fail('FT422', 'Enter a buy-in more than £0.00.'); end if;
+  if (select count(*) from game_entries where game_id = p_game) >= 40 then perform _fail('FT422', 'A game can have at most 40 players.'); end if;
+  insert into game_entries (game_id, group_id, player_id, buy_in_pence) values (p_game, v_g.group_id, p_player, p_buy_in)
+  on conflict do nothing;
+  if not found then perform _fail('FT409', _entry_name(p_player) || ' is already in this game.'); end if;
+end $$;
+
+create or replace function public.live_rebuy(p_game uuid, p_player uuid, p_amount integer) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games; v_e game_entries%rowtype;
+begin
+  v_g := _live_game(p_game);
+  if p_amount is null or p_amount <= 0 or p_amount > 10000000 then perform _fail('FT422', 'Enter a rebuy more than £0.00.'); end if;
+  select * into v_e from game_entries where game_id = p_game and player_id = p_player for update;
+  if v_e.game_id is null then perform _fail('FT404', 'That player is not in this game.'); end if;
+  if v_e.cash_out_pence is not null then perform _fail('FT409', _entry_name(p_player) || ' has cashed out. Undo the cash-out first.'); end if;
+  if cardinality(v_e.rebuys_pence) >= 50 then perform _fail('FT422', 'Too many rebuys.'); end if;
+  update game_entries set rebuys_pence = rebuys_pence || p_amount where game_id = p_game and player_id = p_player;
+end $$;
+
+create or replace function public.live_undo_rebuy(p_game uuid, p_player uuid) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games; v_e game_entries%rowtype;
+begin
+  v_g := _live_game(p_game);
+  select * into v_e from game_entries where game_id = p_game and player_id = p_player for update;
+  if v_e.game_id is null then perform _fail('FT404', 'That player is not in this game.'); end if;
+  if cardinality(v_e.rebuys_pence) = 0 then return; end if;
+  update game_entries set rebuys_pence = rebuys_pence[1:cardinality(rebuys_pence) - 1] where game_id = p_game and player_id = p_player;
+end $$;
+
+-- Set (or with null, undo) a player's cash-out, e.g. when they leave early.
+create or replace function public.live_cash_out(p_game uuid, p_player uuid, p_amount integer) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games;
+begin
+  v_g := _live_game(p_game);
+  if p_amount is not null and (p_amount < 0 or p_amount > 100000000) then perform _fail('FT422', 'Enter a cash-out of £0.00 or more.'); end if;
+  update game_entries set cash_out_pence = p_amount, cashed_out_at = case when p_amount is null then null else now() end
+  where game_id = p_game and player_id = p_player;
+  if not found then perform _fail('FT404', 'That player is not in this game.'); end if;
+end $$;
+
+create or replace function public.live_remove(p_game uuid, p_player uuid) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games;
+begin
+  v_g := _live_game(p_game);
+  delete from game_entries where game_id = p_game and player_id = p_player;
+  perform _audit(v_g.group_id, 'game.live_player_removed', 'game', p_game, jsonb_build_object('name', _entry_name(p_player)));
+end $$;
+
+-- End the game: everyone must have cashed out. It becomes a draft for an
+-- admin to check and finalise (the person who started it, or an admin, can end it).
+create or replace function public.end_live_game(p_game uuid) returns integer
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_g games; v_left int;
+begin
+  v_g := _live_game(p_game);
+  if v_g.created_by is distinct from auth.uid() and not _is_admin(v_g.group_id) then
+    perform _fail('FT403', 'Only the person who started the game or an admin can end it.');
+  end if;
+  if (select count(*) from game_entries where game_id = p_game) < 2 then perform _fail('FT422', 'A game needs at least two players.'); end if;
+  select count(*) into v_left from game_entries where game_id = p_game and cash_out_pence is null;
+  if v_left > 0 then
+    perform _fail('FT422', v_left || case when v_left = 1 then ' player is' else ' players are' end || ' still playing. Cash everyone out first.');
+  end if;
+  update games set status = 'draft', version = version + 1, updated_at = now() where id = p_game;
+  perform _audit(v_g.group_id, 'game.live_ended', 'game', p_game, jsonb_build_object('name', v_g.name));
+  return v_g.version + 2;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Balances and payments
 -- ---------------------------------------------------------------------------
 
@@ -717,13 +893,56 @@ begin
   return query select * from _balances(p_group);
 end $$;
 
--- Members record a payment as "pending"; an admin's own record is confirmed at
--- once (the admin is vouching that the money moved). p_client_token prevents
+-- A payment counts only once BOTH sides have confirmed it: the person who
+-- paid and the person who was paid (whoever has claimed each player). No
+-- admin is needed. If a player hasn't been claimed by anyone yet, a group
+-- admin may confirm that player's side so the payment isn't stuck forever.
+
+-- Which sides of a payment the current user may confirm.
+create or replace function public._payment_sides(v_p payments, out can_payer boolean, out can_payee boolean)
+language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare v_from uuid; v_to uuid; v_admin boolean := _is_admin(v_p.group_id);
+begin
+  select claimed_by into v_from from players where id = v_p.from_player;
+  select claimed_by into v_to from players where id = v_p.to_player;
+  can_payer := coalesce(v_from = auth.uid(), false) or (v_from is null and v_admin);
+  can_payee := coalesce(v_to = auth.uid(), false) or (v_to is null and v_admin);
+end $$;
+
+-- Mark the sides the current user can vouch for; if both are now confirmed,
+-- the payment becomes "confirmed" and starts counting towards balances.
+create or replace function public._confirm_sides(p_payment uuid) returns boolean
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_p payments%rowtype; v_sides record; v_did boolean := false;
+begin
+  select * into v_p from payments where id = p_payment for update;
+  select * into v_sides from _payment_sides(v_p);
+  if v_p.payer_confirmed_at is null and v_sides.can_payer then
+    update payments set payer_confirmed_by = auth.uid(), payer_confirmed_at = now() where id = p_payment;
+    v_did := true;
+  end if;
+  if v_p.payee_confirmed_at is null and v_sides.can_payee then
+    update payments set payee_confirmed_by = auth.uid(), payee_confirmed_at = now() where id = p_payment;
+    v_did := true;
+  end if;
+  select * into v_p from payments where id = p_payment;
+  if v_p.payer_confirmed_at is not null and v_p.payee_confirmed_at is not null then
+    perform _check_payment_fits(v_p.group_id, v_p.from_player, v_p.to_player, v_p.amount_pence);
+    update payments set status = 'confirmed', confirmed_by = auth.uid(), confirmed_at = now(), version = version + 1
+    where id = p_payment;
+    perform _audit(v_p.group_id, 'payment.confirmed', 'payment', p_payment,
+      jsonb_build_object('from', v_p.from_player, 'to', v_p.to_player, 'amount_pence', v_p.amount_pence));
+  end if;
+  return v_did;
+end $$;
+
+-- Any member can record a payment. The recorder's own side (if they are the
+-- payer or the payee) is confirmed straight away. p_client_token prevents
 -- duplicates from double taps or retries.
 create or replace function public.record_payment(
   p_group uuid, p_from uuid, p_to uuid, p_amount_pence integer, p_note text, p_client_token uuid default null)
 returns uuid language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_uid uuid := _uid(); v_id uuid; v_admin boolean; v_status text;
+declare v_uid uuid := _uid(); v_id uuid;
 begin
   perform _require_member(p_group);
   if p_client_token is not null then
@@ -735,42 +954,51 @@ begin
     perform _fail('FT422', 'Both players must be in this group.');
   end if;
   if p_amount_pence is null or p_amount_pence <= 0 then perform _fail('FT422', 'Enter an amount more than £0.00.'); end if;
-  v_admin := _is_admin(p_group);
-  v_status := case when v_admin then 'confirmed' else 'pending' end;
   perform _lock_group(p_group);
-  if v_admin then perform _check_payment_fits(p_group, p_from, p_to, p_amount_pence); end if;
-  insert into payments (group_id, from_player, to_player, amount_pence, note, status, client_token,
-                        recorded_by, confirmed_by, confirmed_at)
-  values (p_group, p_from, p_to, p_amount_pence, _clean_text(p_note, 'Note', 200, false), v_status, p_client_token,
-          v_uid, case when v_admin then v_uid end, case when v_admin then now() end)
+  perform _check_payment_fits(p_group, p_from, p_to, p_amount_pence);
+  insert into payments (group_id, from_player, to_player, amount_pence, note, status, client_token, recorded_by)
+  values (p_group, p_from, p_to, p_amount_pence, _clean_text(p_note, 'Note', 200, false), 'pending', p_client_token, v_uid)
   returning id into v_id;
-  perform _audit(p_group, case when v_admin then 'payment.recorded_confirmed' else 'payment.recorded_pending' end,
-    'payment', v_id, jsonb_build_object('from', p_from, 'to', p_to, 'amount_pence', p_amount_pence));
+  perform _audit(p_group, 'payment.recorded_pending', 'payment', v_id,
+    jsonb_build_object('from', p_from, 'to', p_to, 'amount_pence', p_amount_pence));
+  -- The recorder vouches for their own side only (an admin recording on behalf
+  -- of others still needs the players themselves to confirm).
+  if exists (select 1 from players where id in (p_from, p_to) and claimed_by = v_uid) then
+    update payments set
+      payer_confirmed_by = case when (select claimed_by from players where id = p_from) = v_uid then v_uid end,
+      payer_confirmed_at = case when (select claimed_by from players where id = p_from) = v_uid then now() end,
+      payee_confirmed_by = case when (select claimed_by from players where id = p_to) = v_uid then v_uid end,
+      payee_confirmed_at = case when (select claimed_by from players where id = p_to) = v_uid then now() end
+    where id = v_id;
+  end if;
   return v_id;
 end $$;
 
 create or replace function public.confirm_payment(p_payment uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_p payments%rowtype;
+declare v_p payments%rowtype; v_sides record; v_from text; v_to text;
 begin
   select * into v_p from payments where id = p_payment;
   if v_p.id is null then perform _fail('FT404', 'Payment not found.'); end if;
-  perform _require_admin(v_p.group_id);
+  perform _require_member(v_p.group_id);
   perform _lock_group(v_p.group_id);
   select * into v_p from payments where id = p_payment for update;
   if v_p.status = 'confirmed' then return; end if;
   if v_p.status <> 'pending' then perform _fail('FT409', 'This payment is no longer pending.'); end if;
-  perform _check_payment_fits(v_p.group_id, v_p.from_player, v_p.to_player, v_p.amount_pence);
-  update payments set status = 'confirmed', confirmed_by = auth.uid(), confirmed_at = now(), version = version + 1
-  where id = p_payment;
-  perform _audit(v_p.group_id, 'payment.confirmed', 'payment', p_payment, jsonb_build_object('amount_pence', v_p.amount_pence));
+  select * into v_sides from _payment_sides(v_p);
+  if not (v_sides.can_payer or v_sides.can_payee) then
+    select name into v_from from players where id = v_p.from_player;
+    select name into v_to from players where id = v_p.to_player;
+    perform _fail('FT403', 'Only ' || v_from || ' (who paid) and ' || v_to || ' (who was paid) can confirm this payment.');
+  end if;
+  perform _confirm_sides(p_payment);  -- a repeat tap on an already-confirmed side does nothing
 end $$;
 
--- Pending payments: the recorder can withdraw, an admin can reject.
+-- Pending payments: the recorder, either side, or an admin can reject it.
 -- Confirmed payments: only an admin can void, with a reason.
 create or replace function public.cancel_payment(p_payment uuid, p_reason text) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare v_p payments%rowtype; v_reason text := _clean_text(p_reason, 'Reason', 200, false);
+declare v_p payments%rowtype; v_reason text := _clean_text(p_reason, 'Reason', 200, false); v_involved boolean;
 begin
   select * into v_p from payments where id = p_payment;
   if v_p.id is null then perform _fail('FT404', 'Payment not found.'); end if;
@@ -778,8 +1006,10 @@ begin
   perform _lock_group(v_p.group_id);
   select * into v_p from payments where id = p_payment for update;
   if v_p.status = 'pending' then
-    if v_p.recorded_by is distinct from auth.uid() and not _is_admin(v_p.group_id) then
-      perform _fail('FT403', 'Only an admin or the person who recorded it can cancel this payment.');
+    v_involved := v_p.recorded_by = auth.uid() or _is_admin(v_p.group_id)
+      or exists (select 1 from players where id in (v_p.from_player, v_p.to_player) and claimed_by = auth.uid());
+    if not v_involved then
+      perform _fail('FT403', 'Only the two players involved, the person who recorded it, or an admin can reject this payment.');
     end if;
     update payments set status = 'rejected', closed_by = auth.uid(), closed_at = now(),
       close_reason = nullif(v_reason, ''), version = version + 1 where id = p_payment;
@@ -810,7 +1040,8 @@ begin
     'group', (select jsonb_build_object('id', id, 'name', name, 'is_sample', is_sample) from groups where id = p_group),
     'players', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'active', active,
                           'claimed_by', claimed_by) order by created_at, name) from players where group_id = p_group), '[]'::jsonb),
-    'games', coalesce((select jsonb_agg(_game_json(id) order by played_on, created_at) from games where group_id = p_group), '[]'::jsonb),
+    -- Live games are still being played, so they're left out of backups.
+    'games', coalesce((select jsonb_agg(_game_json(id) order by played_on, created_at) from games where group_id = p_group and status <> 'live'), '[]'::jsonb),
     'payments', coalesce((select jsonb_agg(jsonb_build_object(
                   'id', id, 'from_player', from_player, 'to_player', to_player, 'amount_pence', amount_pence,
                   'note', note, 'status', status, 'recorded_at', recorded_at, 'confirmed_at', confirmed_at,
@@ -894,14 +1125,19 @@ begin
       perform _fail('FT422', 'A payment in the backup refers to a missing player.');
     end if;
     insert into payments (group_id, from_player, to_player, amount_pence, note, status, recorded_by, recorded_at,
-                          confirmed_by, confirmed_at, close_reason)
+                          confirmed_by, confirmed_at, close_reason,
+                          payer_confirmed_by, payer_confirmed_at, payee_confirmed_by, payee_confirmed_at)
     values (p_group, (v_map ->> (v_item ->> 'from_player'))::uuid, (v_map ->> (v_item ->> 'to_player'))::uuid,
             _pence(v_item -> 'amount_pence', 'Payment amount', false),
             _clean_text(v_item ->> 'note', 'Note', 200, false), v_status, auth.uid(),
             coalesce((v_item ->> 'recorded_at')::timestamptz, now()),
             case when v_status <> 'pending' then auth.uid() end,
             case when v_status <> 'pending' then coalesce((v_item ->> 'confirmed_at')::timestamptz, now()) end,
-            v_item ->> 'close_reason');
+            v_item ->> 'close_reason',
+            case when v_status <> 'pending' then auth.uid() end,
+            case when v_status <> 'pending' then coalesce((v_item ->> 'confirmed_at')::timestamptz, now()) end,
+            case when v_status <> 'pending' then auth.uid() end,
+            case when v_status <> 'pending' then coalesce((v_item ->> 'confirmed_at')::timestamptz, now()) end);
     v_payments := v_payments + 1;
   end loop;
 
@@ -955,10 +1191,11 @@ begin
   insert into game_entries (game_id, group_id, player_id, buy_in_pence, rebuys_pence, cash_out_pence) values
     (v_game, v_group, v_ids[1], 2000, '{}', 2500), (v_game, v_group, v_ids[2], 2000, '{}', 1500);
 
-  insert into payments (group_id, from_player, to_player, amount_pence, note, status, recorded_by, confirmed_by, confirmed_at)
-  values (v_group, v_ids[4], v_ids[1], 1000, 'Sample: bank transfer', 'confirmed', v_uid, v_uid, now());
-  insert into payments (group_id, from_player, to_player, amount_pence, note, status, recorded_by)
-  values (v_group, v_ids[6], v_ids[3], 500, 'Sample: awaiting admin check', 'pending', v_uid);
+  insert into payments (group_id, from_player, to_player, amount_pence, note, status, recorded_by, confirmed_by, confirmed_at,
+                        payer_confirmed_by, payer_confirmed_at, payee_confirmed_by, payee_confirmed_at)
+  values (v_group, v_ids[4], v_ids[1], 1000, 'Sample: bank transfer', 'confirmed', v_uid, v_uid, now(), v_uid, now(), v_uid, now());
+  insert into payments (group_id, from_player, to_player, amount_pence, note, status, recorded_by, payer_confirmed_by, payer_confirmed_at)
+  values (v_group, v_ids[6], v_ids[3], 500, 'Sample: paid, waiting for Chloe to confirm', 'pending', v_uid, v_uid, now());
 
   perform _audit(v_group, 'sample.created', 'group', v_group);
   return v_group;
@@ -1019,7 +1256,7 @@ grant select on public.profiles, public.groups, public.group_members, public.pla
 revoke execute on all functions in schema public from public, anon, authenticated;
 grant execute on function
   public._is_member(uuid), public._is_admin(uuid), public._shares_group(uuid),
-  public.update_my_profile(text),
+  public.update_my_profile(text), public.update_my_avatar(text),
   public.create_group(text, text[], integer), public.rename_group(uuid, text),
   public.preview_invite(text), public.join_group(text), public.regenerate_invite(uuid),
   public.set_member_role(uuid, uuid, text), public.remove_member(uuid, uuid),
@@ -1027,6 +1264,9 @@ grant execute on function
   public.claim_player(uuid), public.unclaim_player(uuid),
   public.save_game_draft(uuid, uuid, integer, text, date, text, jsonb, uuid),
   public.delete_draft(uuid, integer), public.finalise_game(uuid, integer),
+  public.start_live_game(uuid, text, date, integer, uuid[], uuid), public.live_join(uuid, uuid, integer),
+  public.live_rebuy(uuid, uuid, integer), public.live_undo_rebuy(uuid, uuid), public.live_cash_out(uuid, uuid, integer),
+  public.live_remove(uuid, uuid), public.end_live_game(uuid),
   public.correct_game(uuid, integer, text, date, text, jsonb, text), public.void_game(uuid, integer, text),
   public.get_balances(uuid), public.record_payment(uuid, uuid, uuid, integer, text, uuid),
   public.confirm_payment(uuid), public.cancel_payment(uuid, text),
@@ -1049,3 +1289,6 @@ begin
     end loop;
   end if;
 end $$;
+
+-- Tell the Data API (PostgREST) to pick up new and changed functions straight away.
+notify pgrst, 'reload schema';

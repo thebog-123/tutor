@@ -48,6 +48,7 @@ suite('Felt database', () => {
   let alice: SupabaseClient; // group creator, admin
   let bob: SupabaseClient; // member
   let carol: SupabaseClient; // outsider
+  let frank: SupabaseClient; // member who joins later and claims Finn
   let groupId: string;
   let invite: string;
   let P: Record<string, string>; // player name -> id
@@ -281,46 +282,110 @@ suite('Felt database', () => {
       expect(transfers.reduce((a, t) => a + t.amount, 0)).toBe(9000);
     });
 
-    it('treats member-recorded payments as pending until an admin confirms them', async () => {
+    it('needs both the payer and the person paid to confirm; admins are not needed', async () => {
+      // Bob plays as Ben (owes £30); Alice plays as Alex (is owed £30). Bob records paying £10.
       const token = randomUUID();
-      const args = { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 1500, p_note: 'Monzo', p_client_token: token };
+      const args = { p_group: groupId, p_from: P.Ben, p_to: P.Alex, p_amount_pence: 1000, p_note: 'Monzo', p_client_token: token };
       const id = await ok(bob.rpc('record_payment', args));
       expect(await ok(bob.rpc('record_payment', args))).toBe(id); // retry is not a duplicate
-      expect((await balances()).Dev.balance).toBe(-4000);
+      let row = await ok(bob.from('payments').select('*').eq('id', id).single());
+      expect(row).toMatchObject({ status: 'pending', payer_confirmed_by: bobId, payee_confirmed_by: null });
+      expect((await balances()).Ben.balance).toBe(-3000); // not counted yet
+      await ok(bob.rpc('confirm_payment', { p_payment: id })); // Bob again: nothing changes
+      expect((await ok(bob.from('payments').select('status').eq('id', id).single())).status).toBe('pending');
+      await fails(carol.rpc('confirm_payment', { p_payment: id }), 'FT403'); // outsider
+
+      // Someone else in the group (even with Ben's debt being real) can't confirm for Alex.
+      const erin = await newUser('Erin');
+      await ok(erin.rpc('join_group', { p_code: invite }));
+      await fails(erin.rpc('confirm_payment', { p_payment: id }), 'FT403', /Only Ben \(who paid\) and Alex \(who was paid\)/);
+
+      // Alex's owner confirms receipt: now it counts.
+      await ok(alice.rpc('confirm_payment', { p_payment: id }));
+      row = await ok(bob.from('payments').select('*').eq('id', id).single());
+      expect(row).toMatchObject({ status: 'confirmed', recorded_by: bobId, payer_confirmed_by: bobId, payee_confirmed_by: aliceId, confirmed_by: aliceId });
+      expect(row.confirmed_at && row.payer_confirmed_at && row.payee_confirmed_at).toBeTruthy();
+      const bal = await balances();
+      expect(bal.Ben.balance).toBe(-2000); // partial payment
+      expect(bal.Alex.balance).toBe(2000);
+      await ok(alice.rpc('confirm_payment', { p_payment: id })); // double tap is harmless
+    });
+
+    it('lets the person being paid record it too, and the payer then confirms', async () => {
+      const id = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Ben, p_to: P.Alex, p_amount_pence: 500, p_note: 'cash' }));
+      const row = await ok(alice.from('payments').select('payer_confirmed_by,payee_confirmed_by,status').eq('id', id).single());
+      expect(row).toEqual({ payer_confirmed_by: null, payee_confirmed_by: aliceId, status: 'pending' }); // admin rights don't confirm Ben's side
+      await ok(bob.rpc('confirm_payment', { p_payment: id }));
+      expect((await balances()).Ben.balance).toBe(-1500);
+    });
+
+    it('lets either side reject a payment that never happened', async () => {
+      const id = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Ben, p_to: P.Alex, p_amount_pence: 700, p_note: '' }));
+      const erin = await newUser('Erin2');
+      await ok(erin.rpc('join_group', { p_code: invite }));
+      await fails(erin.rpc('cancel_payment', { p_payment: id, p_reason: 'nope' }), 'FT403');
+      await ok(bob.rpc('cancel_payment', { p_payment: id, p_reason: 'I never sent this' }));
+      await fails(bob.rpc('confirm_payment', { p_payment: id }), 'FT409');
+      expect((await balances()).Ben.balance).toBe(-1500);
+    });
+
+    it('lets an admin confirm only for players nobody has claimed yet', async () => {
+      // Dev and Ella are unclaimed: Bob (a member) records it, the admin vouches for both sides.
+      const id = await ok(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 1500, p_note: '' }));
       await fails(bob.rpc('confirm_payment', { p_payment: id }), 'FT403');
       await ok(alice.rpc('confirm_payment', { p_payment: id }));
-      await ok(alice.rpc('confirm_payment', { p_payment: id })); // double tap
       const bal = await balances();
-      expect(bal.Dev.balance).toBe(-2500); // partial payment
+      expect(bal.Dev.balance).toBe(-2500);
       expect(bal.Ella.balance).toBe(3500);
-      const row = await ok(bob.from('payments').select('recorded_by,confirmed_by,status,recorded_at,confirmed_at').eq('id', id).single());
-      expect(row).toMatchObject({ recorded_by: bobId, confirmed_by: aliceId, status: 'confirmed' });
-      expect(row.confirmed_at).toBeTruthy();
+
+      // Finn is claimed by Frank: the admin can confirm Chloe's (unclaimed) side but not Finn's.
+      frank = await newUser('Frank');
+      await ok(frank.rpc('join_group', { p_code: invite }));
+      await ok(frank.rpc('claim_player', { p_player: P.Finn }));
+      const id2 = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Finn, p_to: P.Chloe, p_amount_pence: 1000, p_note: '' }));
+      await ok(alice.rpc('confirm_payment', { p_payment: id2 }));
+      let row = await ok(alice.from('payments').select('status,payer_confirmed_by,payee_confirmed_by').eq('id', id2).single());
+      expect(row).toEqual({ status: 'pending', payer_confirmed_by: null, payee_confirmed_by: aliceId });
+      await ok(frank.rpc('confirm_payment', { p_payment: id2 }));
+      row = await ok(alice.from('payments').select('status').eq('id', id2).single());
+      expect(row.status).toBe('confirmed');
+      expect((await balances()).Finn.balance).toBe(-1000);
     });
 
     it('never lets a payment move the leaderboard', async () => {
       const bal = await balances();
       expect(bal.Dev.profit).toBe(-4000);
       expect(bal.Ella.profit).toBe(5000);
+      expect(bal.Ben.profit).toBe(-3000);
     });
 
     it('rejects overpayments and payments between the wrong people', async () => {
-      await fails(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Alex, p_amount_pence: 2600, p_note: '' }), 'FT422', /only owes £25.00/);
-      await fails(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Chloe, p_amount_pence: 1100, p_note: '' }), 'FT422', /only owed £10.00/);
-      await fails(alice.rpc('record_payment', { p_group: groupId, p_from: P.Alex, p_to: P.Ella, p_amount_pence: 100, p_note: '' }), 'FT422', /only owes £0.00/);
-      await fails(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Dev, p_amount_pence: 100, p_note: '' }), 'FT422');
-      await fails(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Alex, p_amount_pence: 0, p_note: '' }), 'FT422');
-      // A pending claim that would overpay cannot be confirmed.
-      const id = await ok(bob.rpc('record_payment', { p_group: groupId, p_from: P.Finn, p_to: P.Alex, p_amount_pence: 9900, p_note: '' }));
-      await fails(alice.rpc('confirm_payment', { p_payment: id }), 'FT422', /overpay/);
-      await ok(bob.rpc('cancel_payment', { p_payment: id, p_reason: 'typo' }));
+      // Now: Alex +15, Ben -15, Chloe 0, Dev -25, Ella +35, Finn -10.
+      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2600, p_note: '' }), 'FT422', /only owes £25.00/);
+      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Alex, p_amount_pence: 1600, p_note: '' }), 'FT422', /only owed £15.00/);
+      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Alex, p_to: P.Ella, p_amount_pence: 100, p_note: '' }), 'FT422', /only owes £0.00/);
+      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Dev, p_amount_pence: 100, p_note: '' }), 'FT422');
+      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 0, p_note: '' }), 'FT422');
+      // Two pending payments that each fit, but not together: the second can't be fully confirmed.
+      const a = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2000, p_note: '' }));
+      const b = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2000, p_note: '' }));
+      await ok(alice.rpc('confirm_payment', { p_payment: a }));
+      await fails(alice.rpc('confirm_payment', { p_payment: b }), 'FT422', /overpay/);
+      expect((await ok(alice.from('payments').select('status,payer_confirmed_by').eq('id', b).single()))).toEqual({ status: 'pending', payer_confirmed_by: null });
+      await ok(alice.rpc('cancel_payment', { p_payment: b, p_reason: 'duplicate' }));
     });
 
-    it('settles everything when the suggested transfers are paid', async () => {
+    it('settles everything when the suggested transfers are paid and confirmed', async () => {
       const bal = await balances();
       const transfers = simplifyDebts(Object.entries(bal).map(([name, v]) => ({ id: name, name, balance: v.balance })));
+      expect(transfers.length).toBeGreaterThan(0);
       for (const t of transfers) {
-        await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P[t.from], p_to: P[t.to], p_amount_pence: t.amount, p_note: 'settle up' }));
+        const id = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P[t.from], p_to: P[t.to], p_amount_pence: t.amount, p_note: 'settle up' }));
+        // Each side confirms; the admin also covers unclaimed players. Others get FT403.
+        for (const c of [alice, bob, frank]) {
+          const { error } = await c.rpc('confirm_payment', { p_payment: id });
+          if (error && error.code !== 'FT403') throw new Error(JSON.stringify(error));
+        }
       }
       const after = await balances();
       expect(Object.values(after).every((v) => v.balance === 0)).toBe(true);

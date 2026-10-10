@@ -7,12 +7,12 @@ export interface EntryLike {
   player_id: string;
   buy_in_pence: number;
   rebuys_pence: number[];
-  cash_out_pence: number;
+  cash_out_pence: number | null; // null = still playing (live games only)
 }
 
 export interface GameLike {
   id: string;
-  status: 'draft' | 'final' | 'void';
+  status: 'live' | 'draft' | 'final' | 'void';
   played_on: string; // YYYY-MM-DD
   entries: EntryLike[];
 }
@@ -33,12 +33,12 @@ export function totalIn(e: Pick<EntryLike, 'buy_in_pence' | 'rebuys_pence'>): nu
 }
 
 export function entryProfit(e: EntryLike): number {
-  return e.cash_out_pence - totalIn(e);
+  return (e.cash_out_pence ?? 0) - totalIn(e);
 }
 
 export function gameTotals(entries: EntryLike[]): { totalIn: number; totalOut: number; difference: number } {
   const tIn = entries.reduce((a, e) => a + totalIn(e), 0);
-  const tOut = entries.reduce((a, e) => a + e.cash_out_pence, 0);
+  const tOut = entries.reduce((a, e) => a + (e.cash_out_pence ?? 0), 0);
   return { totalIn: tIn, totalOut: tOut, difference: tOut - tIn };
 }
 
@@ -78,10 +78,28 @@ export function leaderboard(
     average: Math.round(r.profit / r.games),
     rank: 0,
   }));
-  rows.sort((a, b) => b.profit - a.profit || b.average - a.average || a.name.localeCompare(b.name));
-  // Equal profit shares a rank ("1, 2, 2, 4").
-  rows.forEach((r, i) => {
-    r.rank = i > 0 && rows[i - 1].profit === r.profit ? rows[i - 1].rank : i + 1;
+  return sortLeaderboard(rows, 'profit', 'desc');
+}
+
+export type SortKey = 'profit' | 'average' | 'winPct' | 'wins' | 'games';
+
+const TIEBREAK: SortKey[] = ['profit', 'average', 'winPct', 'games'];
+
+/**
+ * Order rows by one statistic and number them by it. Players level on that
+ * statistic share a rank ("1, 2, 2, 4"); ties are listed by the other stats,
+ * then by name.
+ */
+export function sortLeaderboard(rows: LeaderRow[], key: SortKey, dir: 'desc' | 'asc' = 'desc'): LeaderRow[] {
+  const sign = dir === 'desc' ? -1 : 1;
+  const sorted = rows.map((r) => ({ ...r })).sort((a, b) => {
+    const primary = sign * (a[key] - b[key]);
+    if (primary) return primary;
+    for (const k of TIEBREAK) if (k !== key && a[k] !== b[k]) return b[k] - a[k];
+    return a.name.localeCompare(b.name);
   });
-  return rows;
+  sorted.forEach((r, i) => {
+    r.rank = i > 0 && sorted[i - 1][key] === r[key] ? sorted[i - 1].rank : i + 1;
+  });
+  return sorted;
 }

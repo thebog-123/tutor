@@ -6,10 +6,12 @@ import { entryProfit, gameTotals, totalIn } from '../lib/stats';
 import { formatPence } from '../lib/money';
 import { Banner, Confirm, Empty, ErrorBanner, Money, SectionTitle, Skeleton, formatDate, formatDateTime, useToast } from '../ui';
 import type { AuditRow, Game } from '../types';
+import { LiveGame } from './LiveGame';
 
 export function StatusBadge({ status }: { status: Game['status'] }) {
   if (status === 'final') return <span className="badge green">Final</span>;
   if (status === 'draft') return <span className="badge warn">Draft</span>;
+  if (status === 'live') return <span className="badge live">● Live</span>;
   return <span className="badge red">Void</span>;
 }
 
@@ -17,14 +19,21 @@ export function GamesList() {
   const g = useGroup();
   const base = `#/g/${g.group.id}`;
   const [showVoid, setShowVoid] = useState(false);
-  const games = g.games.filter((x) => showVoid || x.status !== 'void');
+  const games = g.games
+    .filter((x) => showVoid || x.status !== 'void')
+    .sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live'));
   const voidCount = g.games.length - g.games.filter((x) => x.status !== 'void').length;
   return (
     <div className="stack-lg">
       <div className="row-between">
         <h1>Games</h1>
-        <a className="btn primary small" href={`${base}/games/new`}>
-          + New game
+      </div>
+      <div className="btn-row">
+        <a className="btn primary" href={`${base}/games/live`}>
+          ● Start live game
+        </a>
+        <a className="btn" href={`${base}/games/new`}>
+          Record a finished game
         </a>
       </div>
       {games.length === 0 ? (
@@ -81,6 +90,14 @@ export function GameDetail({ gameId }: { gameId: string }) {
   }, [gameId, game?.version, game?.status]);
 
   const rows = useMemo(() => (game ? [...game.entries].sort((a, b) => entryProfit(b) - entryProfit(a)) : []), [game]);
+  // Opened from a link to a game this screen hasn't loaded yet (e.g. a live game just started): fetch once.
+  const [checked, setChecked] = useState(false);
+  useEffect(() => {
+    if (!game && !checked) void g.reload().finally(() => setChecked(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, checked]);
+  if (game?.status === 'live') return <LiveGame game={game} />;
+  if (!game && !checked) return <Skeleton count={3} height={60} />;
   if (!game) {
     return (
       <Empty title="Game not found" action={<a className="btn" href={`${base}/games`}>Back to games</a>}>
@@ -143,7 +160,7 @@ export function GameDetail({ gameId }: { gameId: string }) {
                   )}
                 </td>
                 <td>{formatPence(totalIn(e))}</td>
-                <td>{formatPence(e.cash_out_pence)}</td>
+                <td>{formatPence(e.cash_out_pence ?? 0)}</td>
                 <td>
                   <b>
                     <Money pence={entryProfit(e)} sign />
@@ -274,6 +291,9 @@ export function describeGameAction(action: string) {
       'game.corrected': 'Corrected',
       'game.voided': 'Voided',
       'game.draft_deleted': 'Draft deleted',
+      'game.live_started': 'Live game started',
+      'game.live_ended': 'Live game ended',
+      'game.live_player_removed': 'Player removed from live game',
     }[action] ?? action
   );
 }

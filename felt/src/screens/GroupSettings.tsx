@@ -131,7 +131,7 @@ function MembersSection() {
           const me = m.user_id === g.me.userId;
           return (
             <li key={m.user_id} className="list-item" style={{ flexWrap: 'wrap' }}>
-              <Avatar name={name} />
+              <Avatar name={name} src={g.avatarForUser(m.user_id)} />
               <span className="grow">
                 <span className="row" style={{ gap: 6 }}>
                   <b className="ellipsis">{name}</b>
@@ -201,7 +201,7 @@ function PlayersSection() {
           const canEdit = g.me.isAdmin || mine;
           return (
             <li key={p.id} className="list-item" style={{ opacity: p.active ? 1 : 0.55 }}>
-              <Avatar name={p.name} />
+              <Avatar name={p.name} src={g.avatarForPlayer(p.id)} />
               <span className="grow">
                 <span className="row" style={{ gap: 6 }}>
                   <b className="ellipsis">{p.name}</b>
@@ -333,7 +333,7 @@ function AdminTools() {
           penceToDecimal(totalIn(e) - e.buy_in_pence),
           e.rebuys_pence.length,
           penceToDecimal(totalIn(e)),
-          penceToDecimal(e.cash_out_pence),
+          penceToDecimal(e.cash_out_pence ?? 0),
           penceToDecimal(entryProfit(e)),
         ]),
       );
@@ -493,9 +493,9 @@ const ACTIONS: Record<string, string> = {
   'game.finalised': 'finalised a game',
   'game.corrected': 'corrected a finalised game',
   'game.voided': 'voided a game',
-  'payment.recorded_pending': 'recorded a payment (pending)',
+  'payment.recorded_pending': 'recorded a payment',
   'payment.recorded_confirmed': 'recorded and confirmed a payment',
-  'payment.confirmed': 'confirmed a payment',
+  'payment.confirmed': 'completed confirming a payment',
   'payment.rejected': 'rejected a payment',
   'payment.voided': 'voided a payment',
   'backup.restore_started': 'started a restore (previous data saved)',

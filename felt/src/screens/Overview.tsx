@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { useGroup } from '../data';
-import { leaderboard, entryProfit } from '../lib/stats';
+import { leaderboard, entryProfit, gameTotals } from '../lib/stats';
 import { simplifyDebts } from '../lib/settle';
 import { formatPence } from '../lib/money';
+import { needsMe } from '../lib/payments';
 import { Banner, Empty, Money, SectionTitle, formatDate } from '../ui';
 
 export function Overview() {
@@ -15,7 +16,10 @@ export function Overview() {
   const finals = g.games.filter((x) => x.status === 'final');
   const lastGame = finals[0];
   const drafts = g.games.filter((x) => x.status === 'draft');
-  const pending = g.payments.filter((p) => p.status === 'pending');
+  const live = g.games.filter((x) => x.status === 'live');
+  const viewer = { userId: g.me.userId, isAdmin: g.me.isAdmin, claimedBy: (id: string) => g.playersById.get(id)?.claimed_by ?? null };
+  const pending = g.payments.filter((p) => needsMe(p, viewer));
+  const myDrafts = g.me.isAdmin ? drafts : [];
   const myTransfers = useMemo(() => {
     if (!myPlayer) return [];
     try {
@@ -96,20 +100,37 @@ export function Overview() {
         </div>
       )}
 
+      {live.map((game) => {
+        const playing = game.entries.filter((e) => e.cash_out_pence === null).length;
+        const meIn = myPlayer && game.entries.some((e) => e.player_id === myPlayer.id);
+        return (
+          <a key={game.id} className="card row" href={`${base}/games/${game.id}`} style={{ color: 'inherit', borderColor: 'rgba(255,143,134,0.45)' }}>
+            <span className="badge live">● Live</span>
+            <span className="grow">
+              <b>{game.name}</b>
+              <div className="small muted">
+                {playing} playing · pot {formatPence(gameTotals(game.entries).totalIn)}
+              </div>
+            </span>
+            <span className="btn small primary">{meIn ? 'Open' : 'Join'}</span>
+          </a>
+        );
+      })}
+
       <div className="btn-row">
-        <a className="btn primary" href={`${base}/games/new`}>
-          + Record a game
+        <a className="btn primary" href={`${base}/games/live`}>
+          ● Start live game
         </a>
-        <a className="btn" href={`${base}/payments`}>
-          Settle up
+        <a className="btn" href={`${base}/games/new`}>
+          Record a game
         </a>
       </div>
 
-      {g.me.isAdmin && (drafts.length > 0 || pending.length > 0) && (
+      {(myDrafts.length > 0 || pending.length > 0) && (
         <div className="stack-sm">
-          <SectionTitle title="Waiting for an admin" />
+          <SectionTitle title="Needs you" />
           <ul className="list card flush">
-            {drafts.map((d) => (
+            {myDrafts.map((d) => (
               <li key={d.id}>
                 <a className="list-item" href={`${base}/games/${d.id}`}>
                   <span className="badge warn">Draft</span>
@@ -123,7 +144,7 @@ export function Overview() {
                 <a className="list-item" href={`${base}/payments`}>
                   <span className="badge warn">Payments</span>
                   <span className="grow">
-                    {pending.length} payment{pending.length > 1 ? 's' : ''} to confirm
+                    {pending.length} payment{pending.length > 1 ? 's' : ''} for you to confirm
                   </span>
                   <span className="chevron">›</span>
                 </a>

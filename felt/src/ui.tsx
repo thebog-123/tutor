@@ -86,12 +86,38 @@ export function initials(name: string) {
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
 }
 
-export function Avatar({ name }: { name: string }) {
+export function Avatar({ name, src, size }: { name: string; src?: string | null; size?: number }) {
+  const style = size ? { width: size, height: size, fontSize: size * 0.36 } : undefined;
+  if (src) return <img className="avatar" src={src} alt="" style={style} />;
   return (
-    <span className="avatar" aria-hidden>
+    <span className="avatar" aria-hidden style={style}>
       {initials(name)}
     </span>
   );
+}
+
+/** Turn a chosen photo into a small square JPEG data URL (centre-cropped). */
+export async function photoToAvatar(file: File, size = 256): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('Choose a photo (JPEG, PNG or similar).');
+  if (file.size > 25_000_000) throw new Error('That photo is too large.');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("That photo couldn't be opened. Try a JPEG or PNG."));
+      i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 /** Text input for pounds and pence. Reports integer pennies (or null when empty/invalid). */

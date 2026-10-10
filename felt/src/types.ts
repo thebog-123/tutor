@@ -1,5 +1,5 @@
 export type Role = 'admin' | 'member';
-export type GameStatus = 'draft' | 'final' | 'void';
+export type GameStatus = 'live' | 'draft' | 'final' | 'void';
 export type PaymentStatus = 'pending' | 'confirmed' | 'rejected' | 'void';
 
 export interface Group {
@@ -21,6 +21,7 @@ export interface Member {
 export interface Profile {
   id: string;
   display_name: string;
+  avatar_url: string | null;
 }
 
 export interface Player {
@@ -38,7 +39,9 @@ export interface Entry {
   player_id: string;
   buy_in_pence: number;
   rebuys_pence: number[];
-  cash_out_pence: number;
+  cash_out_pence: number | null; // null while still playing in a live game
+  joined_at?: string;
+  cashed_out_at?: string | null;
 }
 
 export interface Game {
@@ -49,6 +52,7 @@ export interface Game {
   notes: string;
   status: GameStatus;
   version: number;
+  standard_buy_in_pence: number | null;
   created_by: string | null;
   created_at: string;
   updated_by: string | null;
@@ -73,6 +77,10 @@ export interface Payment {
   recorded_at: string;
   confirmed_by: string | null;
   confirmed_at: string | null;
+  payer_confirmed_by: string | null;
+  payer_confirmed_at: string | null;
+  payee_confirmed_by: string | null;
+  payee_confirmed_at: string | null;
   closed_by: string | null;
   closed_at: string | null;
   close_reason: string | null;

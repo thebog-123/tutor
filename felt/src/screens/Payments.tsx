@@ -3,8 +3,9 @@ import { rpc } from '../supabase';
 import { useGroup } from '../data';
 import { simplifyDebts, type Transfer } from '../lib/settle';
 import { formatPence } from '../lib/money';
-import { Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDateTime, useToast } from '../ui';
+import { Avatar, Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDateTime, useToast } from '../ui';
 import type { Payment } from '../types';
+import { canReject, confirmableSides, needsMe, type Viewer } from '../lib/payments';
 
 export function Payments() {
   const g = useGroup();
@@ -26,7 +27,8 @@ export function Payments() {
 
   const owing = g.balances.filter((b) => b.balance_pence !== 0).sort((a, b) => a.balance_pence - b.balance_pence);
   const maxAbs = Math.max(1, ...owing.map((b) => Math.abs(b.balance_pence)));
-  const pending = g.payments.filter((p) => p.status === 'pending');
+  const viewer: Viewer = { userId: g.me.userId, isAdmin: g.me.isAdmin, claimedBy: (id) => g.playersById.get(id)?.claimed_by ?? null };
+  const pending = g.payments.filter((p) => p.status === 'pending').sort((a, b) => Number(needsMe(b, viewer)) - Number(needsMe(a, viewer)));
   const myPlayerId = g.me.player?.id;
   const history = g.payments.filter(
     (p) => p.status !== 'pending' && (historyFilter === 'all' || p.from_player === myPlayerId || p.to_player === myPlayerId),
@@ -37,7 +39,7 @@ export function Payments() {
       <div className="stack-sm">
         <h1>Payments</h1>
         <p className="small muted">
-          Felt doesn't move money. Pay each other by bank transfer or cash, then record it here. Payments only count once an admin has checked the money arrived.
+          Felt doesn't move money. Pay each other by bank transfer or cash, then record it here. A payment only counts once both people confirm it: the one who paid and the one who was paid.
         </p>
       </div>
 
@@ -57,7 +59,7 @@ export function Payments() {
                       <b>{g.playerName(t.from)}</b> pays <b>{g.playerName(t.to)}</b> <span className="amt">{formatPence(t.amount)}</span>
                     </span>
                     <button className="btn small" onClick={() => setRecording({ from: t.from, to: t.to, amount: t.amount })}>
-                      {g.me.isAdmin ? 'Record' : 'Paid?'}
+                      {t.from === myPlayerId ? "I've paid" : t.to === myPlayerId ? "I've been paid" : 'Record'}
                     </button>
                   </li>
                 );
@@ -80,7 +82,8 @@ export function Payments() {
               {owing.map((b) => (
                 <li key={b.player_id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                   <div className="row-between">
-                    <span>
+                    <span className="row" style={{ gap: 10 }}>
+                      <Avatar name={g.playerName(b.player_id)} src={g.avatarForPlayer(b.player_id)} size={28} />
                       {g.playerName(b.player_id)}
                       {b.player_id === myPlayerId && <span className="badge lime" style={{ marginLeft: 6 }}>You</span>}
                     </span>
@@ -104,26 +107,41 @@ export function Payments() {
 
       {pending.length > 0 && (
         <div className="stack-sm">
-          <SectionTitle title={`Waiting for an admin (${pending.length})`} />
+          <SectionTitle title={`Waiting for confirmation (${pending.length})`} />
           <ul className="list card flush">
-            {pending.map((p) => (
-              <li key={p.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <PaymentLine p={p} />
-                <div className="btn-row">
-                  {g.me.isAdmin && (
-                    <button className="btn green small" onClick={() => setAction({ kind: 'confirm', payment: p })}>
-                      Confirm received
-                    </button>
+            {pending.map((p) => {
+              const sides = confirmableSides(p, viewer);
+              const fromName = g.playerName(p.from_player);
+              const toName = g.playerName(p.to_player);
+              const unclaimed = (id: string) => !g.playersById.get(id)?.claimed_by;
+              let confirmLabel = '';
+              if (sides.payer && sides.payee) confirmLabel = `Confirm for ${fromName} and ${toName}`;
+              else if (sides.payer) confirmLabel = unclaimed(p.from_player) ? `Confirm for ${fromName}` : 'Yes, I paid this';
+              else if (sides.payee) confirmLabel = unclaimed(p.to_player) ? `Confirm for ${toName}` : 'Yes, I received this';
+              return (
+                <li key={p.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <PaymentLine p={p} />
+                  {(confirmLabel || canReject(p, viewer)) && (
+                    <div className="btn-row">
+                      {confirmLabel && (
+                        <button className="btn green small" onClick={() => setAction({ kind: 'confirm', payment: p })}>
+                          {confirmLabel}
+                        </button>
+                      )}
+                      {canReject(p, viewer) && (
+                        <button className="btn danger small" onClick={() => setAction({ kind: 'reject', payment: p })}>
+                          {p.recorded_by === g.me.userId ? 'Withdraw' : 'Reject'}
+                        </button>
+                      )}
+                    </div>
                   )}
-                  {(g.me.isAdmin || p.recorded_by === g.me.userId) && (
-                    <button className="btn danger small" onClick={() => setAction({ kind: g.me.isAdmin ? 'reject' : 'withdraw', payment: p })}>
-                      {g.me.isAdmin ? 'Reject' : 'Withdraw'}
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
+          <p className="tiny faint">
+            If a player hasn't joined Felt yet, a group admin can confirm for them.
+          </p>
         </div>
       )}
 
@@ -167,7 +185,7 @@ export function Payments() {
           onClose={() => setRecording(null)}
           onDone={(confirmed) => {
             setRecording(null);
-            toast.show(confirmed ? 'Payment recorded. Balances updated.' : 'Recorded. An admin will confirm it once they have checked.');
+            toast.show(confirmed ? 'Payment confirmed. Balances updated.' : 'Recorded. It counts once the other person confirms it.');
           }}
         />
       )}
@@ -185,14 +203,16 @@ export function Payments() {
             if (action.kind === 'confirm') await rpc('confirm_payment', { p_payment: action.payment.id });
             else await rpc('cancel_payment', { p_payment: action.payment.id, p_reason: reason });
             await g.reload();
-            toast.show(action.kind === 'confirm' ? 'Payment confirmed. Balances updated.' : 'Done');
+            toast.show('Done');
           }}
         >
           <div className="card">
             <PaymentLine p={action.payment} />
           </div>
           {action.kind === 'confirm' && (
-            <p className="muted small">Only confirm once you've checked the money actually arrived. This updates everyone's balances (not the leaderboard).</p>
+            <p className="muted small">
+              Only confirm what really happened. Once both sides have confirmed, balances update (the leaderboard doesn't change).
+            </p>
           )}
           {action.kind === 'void' && <p className="muted small">Use this if the payment was recorded by mistake or the transfer bounced. Balances will go back up.</p>}
         </Confirm>
@@ -218,12 +238,23 @@ function PaymentLine({ p }: { p: Payment }) {
         {status}
       </div>
       {p.note && <span className="small">“{p.note}”</span>}
+      {(p.status === 'pending' || p.payer_confirmed_at) && (
+        <span className="tiny">
+          <span className={p.payer_confirmed_at ? 'pos' : 'faint'}>
+            {p.payer_confirmed_at ? '✓' : '○'} {g.playerName(p.from_player)} paid
+          </span>
+          {'   '}
+          <span className={p.payee_confirmed_at ? 'pos' : 'faint'}>
+            {p.payee_confirmed_at ? '✓' : '○'} {g.playerName(p.to_player)} received
+          </span>
+        </span>
+      )}
       <span className="tiny faint">
         Recorded by {g.personName(p.recorded_by)} · {formatDateTime(p.recorded_at)}
         {p.confirmed_at && p.confirmed_by && (
           <>
             <br />
-            Confirmed by {g.personName(p.confirmed_by)} · {formatDateTime(p.confirmed_at)}
+            Fully confirmed · {formatDateTime(p.confirmed_at)}
           </>
         )}
         {p.closed_at && (
@@ -263,7 +294,7 @@ function RecordPayment({
   const options = [...g.players].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <Sheet title={g.me.isAdmin ? 'Record a payment' : 'Tell the admin you paid'} onClose={busy ? () => undefined : onClose}>
+    <Sheet title="Record a payment" onClose={busy ? () => undefined : onClose}>
       <form
         className="stack"
         onSubmit={async (e) => {
@@ -274,7 +305,7 @@ function RecordPayment({
           try {
             await rpc('record_payment', { p_group: g.group.id, p_from: from, p_to: to, p_amount_pence: amount, p_note: note, p_client_token: token });
             await g.reload();
-            onDone(g.me.isAdmin);
+            onDone(false);
           } catch (err) {
             setError(err);
             setBusy(false);
@@ -319,14 +350,16 @@ function RecordPayment({
           <label htmlFor="pay-note">Note (optional)</label>
           <input id="pay-note" className="input" maxLength={200} value={note} placeholder="e.g. bank transfer, cash" onChange={(e) => setNote(e.target.value)} />
         </div>
-        {g.me.isAdmin ? (
-          <Banner tone="info">As an admin, recording this confirms it straight away. Only do so once you've checked the money moved.</Banner>
-        ) : (
-          <Banner tone="info">This is recorded as pending. Balances change once an admin confirms it.</Banner>
+        {from && to && (
+          <Banner tone="info">
+            This counts once both {g.playerName(from)} and {g.playerName(to)} confirm it.
+            {(g.playersById.get(from)?.claimed_by === g.me.userId || g.playersById.get(to)?.claimed_by === g.me.userId) &&
+              ' Recording it confirms your side.'}
+          </Banner>
         )}
         <ErrorBanner error={error} />
         <button className="btn primary block" disabled={busy || !from || !to || !amount || from === to}>
-          {busy ? <span className="spinner" /> : g.me.isAdmin ? 'Record and confirm' : 'Submit for confirmation'}
+          {busy ? <span className="spinner" /> : 'Record payment'}
         </button>
       </form>
     </Sheet>

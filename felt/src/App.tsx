@@ -11,6 +11,9 @@ import { GameDetail, GamesList } from './screens/Games';
 import { GameEditor } from './screens/GameEditor';
 import { Payments } from './screens/Payments';
 import { GroupSettings } from './screens/GroupSettings';
+import { StartLiveGame } from './screens/LiveGame';
+import { You, pendingActions } from './screens/You';
+import { Avatar } from './ui';
 import { Banner, ErrorBanner, PageLoading, Skeleton } from './ui';
 import { toFeltError } from './errors';
 
@@ -65,7 +68,7 @@ function Redirect({ to }: { to: string }) {
 }
 
 const TABS: { key: string; label: string; icon: ReactNode }[] = [
-  { key: '', label: 'Overview', icon: <path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" /> },
+  { key: '', label: 'Home', icon: <path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" /> },
   { key: 'leaderboard', label: 'Leaderboard', icon: <path d="M4 20V11h4v9M10 20V5h4v15M16 20v-6h4v6" /> },
   {
     key: 'games',
@@ -88,12 +91,12 @@ const TABS: { key: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    key: 'group',
-    label: 'Group',
+    key: 'you',
+    label: 'You',
     icon: (
       <>
-        <circle cx="9" cy="8" r="3.2" />
-        <path d="M3 20c.6-3.4 3-5.5 6-5.5s5.4 2.1 6 5.5M16 5.2a3 3 0 0 1 0 5.6M18 14.8c1.6.8 2.7 2.6 3 5.2" />
+        <circle cx="12" cy="8.5" r="3.8" />
+        <path d="M4.5 20.5c1-4 4-6 7.5-6s6.5 2 7.5 6" />
       </>
     ),
   },
@@ -133,9 +136,8 @@ function GroupShell({ groupId, rest }: { groupId: string; rest: string[] }) {
     }
   }, [notFound, groupId]);
 
-  const attention = data?.me.isAdmin
-    ? data.games.filter((x) => x.status === 'draft').length + data.payments.filter((p) => p.status === 'pending').length
-    : 0;
+  const attention = data ? pendingActions(data).count : 0;
+  const { displayName, avatarUrl } = useSession();
 
   let body: ReactNode;
   if (loading && !data) body = <Skeleton count={4} height={88} />;
@@ -155,11 +157,13 @@ function GroupShell({ groupId, rest }: { groupId: string; rest: string[] }) {
     if (tab === '') body = <Overview />;
     else if (tab === 'leaderboard') body = <Leaderboard />;
     else if (tab === 'games' && rest[1] === 'new') body = <GameEditor key="new" />;
+    else if (tab === 'games' && rest[1] === 'live') body = <StartLiveGame />;
     else if (tab === 'games' && rest[1] && rest[2] === 'edit') body = <GameEditor key={`edit-${rest[1]}`} gameId={rest[1]} />;
     else if (tab === 'games' && rest[1]) body = <GameDetail gameId={rest[1]} />;
     else if (tab === 'games') body = <GamesList />;
     else if (tab === 'payments') body = <Payments />;
     else if (tab === 'group') body = <GroupSettings />;
+    else if (tab === 'you') body = <You section={rest[1]} />;
     else body = <Redirect to={`/g/${groupId}`} />;
   }
 
@@ -177,9 +181,9 @@ function GroupShell({ groupId, rest }: { groupId: string; rest: string[] }) {
         </a>
         <nav className="topnav" aria-label="Sections">
           {TABS.map((t) => (
-            <a key={t.key} href={t.key ? `${base}/${t.key}` : base} className={tab === t.key ? 'active' : ''}>
+            <a key={t.key} href={t.key ? `${base}/${t.key}` : base} className={tab === t.key || (t.key === 'you' && tab === 'group') ? 'active' : ''}>
               {t.label}
-              {t.key === '' && attention > 0 ? ` (${attention})` : ''}
+              {t.key === 'you' && attention > 0 ? ` (${attention})` : ''}
             </a>
           ))}
         </nav>
@@ -191,9 +195,9 @@ function GroupShell({ groupId, rest }: { groupId: string; rest: string[] }) {
       <nav className="tabbar" aria-label="Sections">
         <div className="tabbar-inner">
           {TABS.map((t) => (
-            <a key={t.key} href={t.key ? `${base}/${t.key}` : base} className={`tab ${tab === t.key ? 'active' : ''}`} aria-current={tab === t.key ? 'page' : undefined}>
-              <TabIcon>{t.icon}</TabIcon>
-              {t.key === '' && attention > 0 && <span className="dot" aria-label={`${attention} items need attention`} />}
+            <a key={t.key} href={t.key ? `${base}/${t.key}` : base} className={`tab ${tab === t.key || (t.key === 'you' && tab === 'group') ? 'active' : ''}`} aria-current={tab === t.key ? 'page' : undefined}>
+              {t.key === 'you' && avatarUrl ? <Avatar name={displayName} src={avatarUrl} size={26} /> : <TabIcon>{t.icon}</TabIcon>}
+              {t.key === 'you' && attention > 0 && <span className="count-dot" aria-label={`${attention} items need attention`}>{attention}</span>}
               {t.label}
             </a>
           ))}

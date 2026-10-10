@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 interface SessionValue {
   session: Session | null | undefined; // undefined while loading
   displayName: string;
+  avatarUrl: string | null;
   recovering: boolean; // arrived from a password reset email
   endRecovery: () => void;
   refreshProfile: () => Promise<void>;
@@ -15,6 +16,7 @@ const Ctx = createContext<SessionValue>(null as unknown as SessionValue);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
@@ -29,8 +31,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id;
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
-    const { data } = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    const { data } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', userId).maybeSingle();
     setDisplayName(data?.display_name ?? '');
+    setAvatarUrl(data?.avatar_url ?? null);
   }, [userId]);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refreshProfile]);
 
   return (
-    <Ctx.Provider value={{ session, displayName, recovering, endRecovery: () => setRecovering(false), refreshProfile }}>
+    <Ctx.Provider value={{ session, displayName, avatarUrl, recovering, endRecovery: () => setRecovering(false), refreshProfile }}>
       {children}
     </Ctx.Provider>
   );

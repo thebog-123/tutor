@@ -15,6 +15,8 @@ export interface GroupData {
   me: { userId: string; isAdmin: boolean; player: Player | null };
   personName: (userId: string | null) => string;
   playerName: (playerId: string) => string;
+  avatarForUser: (userId: string | null) => string | null;
+  avatarForPlayer: (playerId: string) => string | null;
 }
 
 interface GroupState {
@@ -36,7 +38,7 @@ async function loadGroup(groupId: string, userId: string): Promise<GroupData> {
     ),
     select<Payment[]>(supabase.from('payments').select('*').eq('group_id', groupId).order('recorded_at', { ascending: false })),
     rpc<BalanceRow[]>('get_balances', { p_group: groupId }),
-    select<Profile[]>(supabase.from('profiles').select('id, display_name')),
+    select<Profile[]>(supabase.from('profiles').select('id, display_name, avatar_url')),
   ]);
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
   const playersById = new Map(players.map((p) => [p.id, p]));
@@ -59,6 +61,11 @@ async function loadGroup(groupId: string, userId: string): Promise<GroupData> {
     me: { userId, isAdmin: meMember?.role === 'admin', player: players.find((p) => p.claimed_by === userId) ?? null },
     personName: (id) => (id ? profileMap.get(id)?.display_name ?? 'Former member' : 'Unknown'),
     playerName: (id) => playersById.get(id)?.name ?? 'Unknown player',
+    avatarForUser: (id) => (id ? profileMap.get(id)?.avatar_url ?? null : null),
+    avatarForPlayer: (id) => {
+      const owner = playersById.get(id)?.claimed_by;
+      return owner ? profileMap.get(owner)?.avatar_url ?? null : null;
+    },
   };
 }
 
@@ -123,6 +130,9 @@ export function GroupProvider({ groupId, children }: { groupId: string; children
 }
 
 export const useGroupState = () => useContext(Ctx);
+
+/** Group data when inside a group's pages, otherwise null. */
+export const useOptionalGroupState = (): GroupState | null => useContext(Ctx) ?? null;
 
 /** For screens rendered only once data has loaded. */
 export function useGroup(): GroupData & { reload: () => Promise<void> } {

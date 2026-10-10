@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase, rpc, select } from '../supabase';
 import { navigate } from '../router';
 import { useSession } from '../session';
-import { Banner, Empty, ErrorBanner, PageLoading, SectionTitle, Skeleton, useToast } from '../ui';
+import { useOptionalGroupState } from '../data';
+import { Avatar, Banner, Empty, ErrorBanner, PageLoading, SectionTitle, Skeleton, photoToAvatar, useToast } from '../ui';
 import { errorMessage } from '../errors';
 import type { Group, Role } from '../types';
 
@@ -157,7 +158,13 @@ function SampleGroup() {
 }
 
 export function AccountCard() {
-  const { session, displayName, refreshProfile } = useSession();
+  const { session, displayName, avatarUrl, refreshProfile } = useSession();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const groupState = useOptionalGroupState();
+  const refreshAll = async () => {
+    await refreshProfile();
+    await groupState?.reload();
+  };
   const [name, setName] = useState(displayName);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -166,6 +173,56 @@ export function AccountCard() {
     <div className="stack-sm">
       <SectionTitle title="Your account" />
       <div className="card stack">
+        <div className="row" style={{ gap: 16 }}>
+          <Avatar name={displayName || '?'} src={avatarUrl} size={72} />
+          <div className="stack-sm grow">
+            <label className="btn small" style={{ alignSelf: 'flex-start' }}>
+              {photoBusy ? <span className="spinner" /> : avatarUrl ? 'Change photo' : 'Add a profile picture'}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={photoBusy}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  setPhotoBusy(true);
+                  try {
+                    await rpc('update_my_avatar', { p_image: await photoToAvatar(file) });
+                    await refreshAll();
+                    toast.show('Profile picture updated');
+                  } catch (err) {
+                    toast.show(errorMessage(err), 'error');
+                  } finally {
+                    setPhotoBusy(false);
+                  }
+                }}
+              />
+            </label>
+            {avatarUrl && (
+              <button
+                className="btn ghost small"
+                style={{ alignSelf: 'flex-start' }}
+                disabled={photoBusy}
+                onClick={async () => {
+                  setPhotoBusy(true);
+                  try {
+                    await rpc('update_my_avatar', { p_image: null });
+                    await refreshAll();
+                  } catch (err) {
+                    toast.show(errorMessage(err), 'error');
+                  } finally {
+                    setPhotoBusy(false);
+                  }
+                }}
+              >
+                Remove photo
+              </button>
+            )}
+            <span className="tiny faint">Only people in your groups can see it.</span>
+          </div>
+        </div>
         <p className="small muted">Signed in as {session?.user.email}</p>
         <form
           className="row"
@@ -174,7 +231,7 @@ export function AccountCard() {
             setBusy(true);
             try {
               await rpc('update_my_profile', { p_display_name: name });
-              await refreshProfile();
+              await refreshAll();
               toast.show('Name updated');
             } catch (err) {
               toast.show(errorMessage(err), 'error');

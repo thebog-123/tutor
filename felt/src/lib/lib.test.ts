@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatPence, parsePounds, penceToInput } from './money';
 import { simplifyDebts, type Balance } from './settle';
-import { entryProfit, gameTotals, leaderboard, type GameLike } from './stats';
+import { entryProfit, gameTotals, leaderboard, sortLeaderboard, type GameLike } from './stats';
 import { toCSV, penceToDecimal } from './csv';
 import { validateBackup } from './backup';
 
@@ -127,6 +127,26 @@ describe('stats', () => {
       ['Ben', 1],
     ]);
   });
+  it('sorts by any column in either direction, re-ranking by that column', () => {
+    const rows = leaderboard(games, players, 'all', today);
+    expect(sortLeaderboard(rows, 'winPct').map((r) => [r.name, r.winPct, r.rank])).toEqual([
+      ['Chloe', 50, 1], // tie on 50%: higher profit first
+      ['Ben', 50, 1],
+      ['Alex', 33, 3],
+    ]);
+    expect(sortLeaderboard(rows, 'games').map((r) => [r.name, r.rank])).toEqual([
+      ['Alex', 1],
+      ['Chloe', 2],
+      ['Ben', 2],
+    ]);
+    expect(sortLeaderboard(rows, 'average', 'asc').map((r) => r.name)).toEqual(['Ben', 'Chloe', 'Alex']);
+    expect(sortLeaderboard(rows, 'profit', 'asc').map((r) => [r.name, r.rank])).toEqual([
+      ['Ben', 1],
+      ['Chloe', 2],
+      ['Alex', 3],
+    ]);
+    expect(rows.map((r) => r.name)).toEqual(['Alex', 'Chloe', 'Ben']); // input untouched
+  });
   it('gives tied players the same rank', () => {
     const rows = leaderboard([game('x', '2026-01-01', [['a', 100, [], 100], ['b', 100, [], 100]])], players, 'all', today);
     expect(rows.map((r) => r.rank)).toEqual([1, 1]);
@@ -171,5 +191,36 @@ describe('validateBackup', () => {
     const fractional = structuredClone(good);
     fractional.games[0].entries[0].buy_in_pence = 10.5;
     expect(validateBackup(fractional).ok).toBe(false);
+  });
+});
+
+import { canReject, confirmableSides, needsMe } from './payments';
+
+describe('payment confirmation sides', () => {
+  const owners: Record<string, string | null> = { ben: 'u-bob', alex: 'u-alice', dev: null };
+  const viewer = (userId: string, isAdmin = false) => ({ userId, isAdmin, claimedBy: (id: string) => owners[id] ?? null });
+  const pay = (from: string, to: string, payer: boolean, payee: boolean, recorded_by = 'u-bob') => ({
+    from_player: from,
+    to_player: to,
+    status: 'pending',
+    recorded_by,
+    payer_confirmed_at: payer ? 'x' : null,
+    payee_confirmed_at: payee ? 'x' : null,
+  });
+  it('asks only the players involved, for the side not yet confirmed', () => {
+    const p = pay('ben', 'alex', true, false);
+    expect(confirmableSides(p, viewer('u-alice'))).toEqual({ payer: false, payee: true });
+    expect(needsMe(p, viewer('u-bob'))).toBe(false);
+    expect(needsMe(p, viewer('u-carol', true))).toBe(false); // admin can't vouch for claimed players
+  });
+  it('lets an admin cover players nobody has claimed', () => {
+    expect(confirmableSides(pay('dev', 'alex', false, false), viewer('u-carol', true))).toEqual({ payer: true, payee: false });
+  });
+  it('lets the players, the recorder or an admin reject', () => {
+    const p = pay('ben', 'alex', true, false, 'u-zed');
+    expect(canReject(p, viewer('u-alice'))).toBe(true);
+    expect(canReject(p, viewer('u-zed'))).toBe(true);
+    expect(canReject(p, viewer('u-carol'))).toBe(false);
+    expect(canReject(p, viewer('u-carol', true))).toBe(true);
   });
 });
