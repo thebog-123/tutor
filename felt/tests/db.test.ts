@@ -22,7 +22,8 @@ async function newUser(name: string): Promise<SupabaseClient> {
   return c;
 }
 
-async function ok<T>(p: PromiseLike<{ data: T; error: unknown }>): Promise<T> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ok(p: PromiseLike<{ data: unknown; error: unknown }>): Promise<any> {
   const { data, error } = await p;
   if (error) throw new Error(JSON.stringify(error));
   return data;
