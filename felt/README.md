@@ -22,7 +22,9 @@ money. It only records what happened.
   or games played, in either direction, for all time, this year or this month.
   It only counts finalised games, so paying a debt never changes the rankings.
 - **You.** Your profile picture, your stats (rank, streaks, best and worst night,
-  game by game), pending actions with a badge count, and your settlements.
+  a running-profit chart, rivalries with your arch nemesis and best friend, and
+  head-to-head records, game by game), pending actions with a badge count, and
+  your settlements.
 - **Who owes whom.** Shows balances from finalised games and confirmed payments,
   and suggests the fewest transfers to settle up ("Dev pays Alice £20"). Partial
   payments are allowed. A payment counts only once **both** people confirm it:

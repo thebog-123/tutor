@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useGroup, type GroupData } from '../data';
 import { useSession } from '../session';
 import { entryProfit, gameTotals, leaderboard } from '../lib/stats';
@@ -7,6 +7,8 @@ import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
 import { Avatar, Banner, Empty, Money, SectionTitle, formatDate, formatDateTime } from '../ui';
 import { AccountCard } from './Groups';
+import { PerformanceChart, RivalCard } from './StatsCharts';
+import { headToHead, profitSeries, rivalries } from '../lib/rivals';
 import { backupDue } from '../lib/backupDownload';
 import { BackupReminder } from './Overview';
 
@@ -227,6 +229,8 @@ function MyStats() {
             <Stat label="Rebuys" value={data.rebuys} />
             <Stat label="Total bought in" value={formatPence(data.mine.reduce((s, x) => s + x.entry.buy_in_pence + x.entry.rebuys_pence.reduce((p, q) => p + q, 0), 0))} />
           </div>
+          <Performance playerId={me.id} />
+          <Rivalries playerId={me.id} />
           <div className="stack-sm">
             <SectionTitle title="Game by game" />
             <ul className="list card flush">
@@ -427,6 +431,84 @@ function Settlements() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+type Period = 'year' | '3m' | 'all';
+
+function Performance({ playerId }: { playerId: string }) {
+  const g = useGroup();
+  const [period, setPeriod] = useState<Period>('all');
+  const from = useMemo(() => {
+    const d = new Date();
+    if (period === 'year') return `${d.getFullYear()}-01-01`;
+    if (period === '3m') {
+      d.setMonth(d.getMonth() - 3);
+      return d.toISOString().slice(0, 10);
+    }
+    return undefined;
+  }, [period]);
+  const points = useMemo(() => profitSeries(g.games, playerId, from), [g.games, playerId, from]);
+  return (
+    <div className="stack-sm">
+      <SectionTitle title="Performance" />
+      <div className="segmented" role="tablist" aria-label="Period">
+        {(
+          [
+            ['3m', 'Last 3 months'],
+            ['year', 'This year'],
+            ['all', 'All time'],
+          ] as [Period, string][]
+        ).map(([value, label]) => (
+          <button key={value} role="tab" aria-selected={period === value} className={period === value ? 'on' : ''} onClick={() => setPeriod(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <PerformanceChart points={points} />
+    </div>
+  );
+}
+
+function Rivalries({ playerId }: { playerId: string }) {
+  const g = useGroup();
+  const rivals = useMemo(
+    () => headToHead(g.games, playerId, (id) => !g.playersById.get(id)?.is_guest),
+    [g.games, g.playersById, playerId],
+  );
+  const { nemesis, bestFriend } = rivalries(rivals);
+  const name = (id: string) => g.playerName(id);
+  if (rivals.length === 0) return null;
+  return (
+    <div className="stack-sm">
+      <SectionTitle title="Rivalries" />
+      <div className="card rivals">
+        <RivalCard rival={nemesis} kind="nemesis" name={name} avatar={g.avatarForPlayer} />
+        <RivalCard rival={bestFriend} kind="friend" name={name} avatar={g.avatarForPlayer} />
+      </div>
+      <p className="tiny faint">
+        Each night you both played counts as a win if you made more than them, a loss if they made more.
+      </p>
+      <ul className="list card flush" aria-label="Head to head">
+        {rivals.map((r) => (
+          <li key={r.playerId} className="list-item" style={{ minHeight: 56 }}>
+            <Avatar name={name(r.playerId)} src={g.avatarForPlayer(r.playerId)} size={32} />
+            <span className="grow">
+              <b>{name(r.playerId)}</b>
+              <span className="tiny muted" style={{ display: 'block' }}>
+                {r.games} {r.games === 1 ? 'game' : 'games'} together
+              </span>
+            </span>
+            <span className="num small">
+              <b className={r.wins > r.losses ? 'pos' : r.wins < r.losses ? 'neg' : ''}>
+                {r.wins}W – {r.losses}L
+              </b>
+              {r.ties ? <span className="muted"> – {r.ties}T</span> : null}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

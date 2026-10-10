@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useGroup } from '../data';
 import { leaderboard, entryProfit, gameTotals } from '../lib/stats';
 import { simplifyDebts } from '../lib/settle';
@@ -9,7 +9,6 @@ import { addMeAsPlayer } from '../lib/me';
 import { backupDue, downloadBackup, snoozeBackup } from '../lib/backupDownload';
 import { useSession } from '../session';
 import { errorMessage } from '../errors';
-import { useState } from 'react';
 
 /** "I'm not on the list": add the signed-in person as a new player. */
 export function AddMeButton({ label = 'Add me as a new player' }: { label?: string }) {

@@ -224,3 +224,45 @@ describe('payment confirmation sides', () => {
     expect(canReject(p, viewer('u-carol', true))).toBe(true);
   });
 });
+
+import { headToHead, profitSeries, rivalries } from './rivals';
+
+describe('rivalries and performance', () => {
+  const fg = (id: string, played_on: string, rows: [string, number, number][], status: GameLike['status'] = 'final') => ({
+    id,
+    name: id,
+    played_on,
+    status,
+    entries: rows.map(([player_id, buy, out]) => ({ player_id, buy_in_pence: buy, rebuys_pence: [], cash_out_pence: out })),
+  });
+  const games = [
+    fg('g1', '2026-01-05', [['me', 1000, 0], ['ann', 1000, 2500], ['bob', 1000, 500]]),
+    fg('g2', '2026-02-05', [['me', 1000, 3000], ['ann', 1000, 0], ['bob', 1000, 0]]),
+    fg('g3', '2026-03-05', [['me', 1000, 500], ['ann', 1000, 2500], ['bob', 1000, 0]]),
+    fg('g4', '2026-03-06', [['me', 1000, 1000], ['bob', 1000, 1000]]),
+    fg('x', '2026-03-07', [['me', 1000, 0], ['bob', 1000, 2000]], 'draft'),
+  ];
+  it('scores each shared night as a win, loss or tie', () => {
+    const r = headToHead(games, 'me');
+    expect(r.find((x) => x.playerId === 'ann')).toEqual({ playerId: 'ann', games: 3, wins: 1, losses: 2, ties: 0 });
+    expect(r.find((x) => x.playerId === 'bob')).toEqual({ playerId: 'bob', games: 4, wins: 2, losses: 1, ties: 1 });
+  });
+  it('picks the arch nemesis and the best friend, or nobody', () => {
+    const { nemesis, bestFriend } = rivalries(headToHead(games, 'me'));
+    expect(nemesis?.playerId).toBe('ann');
+    expect(bestFriend?.playerId).toBe('bob');
+    expect(rivalries([])).toEqual({ nemesis: null, bestFriend: null });
+    expect(headToHead(games, 'me', (id) => id !== 'bob').map((r) => r.playerId)).toEqual(['ann']);
+  });
+  it('builds a running total from £0, oldest first, finalised games only', () => {
+    expect(profitSeries(games, 'me').map((p) => [p.label, p.profit, p.total])).toEqual([
+      ['Start', 0, 0],
+      ['g1', -1000, -1000],
+      ['g2', 2000, 1000],
+      ['g3', -500, 500],
+      ['g4', 0, 500],
+    ]);
+    expect(profitSeries(games, 'me', '2026-03-01').map((p) => p.total)).toEqual([0, -500, -500]);
+    expect(profitSeries(games, 'nobody')).toEqual([]);
+  });
+});
