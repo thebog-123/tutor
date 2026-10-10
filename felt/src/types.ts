@@ -29,6 +29,7 @@ export interface Player {
   group_id: string;
   name: string;
   active: boolean;
+  is_guest: boolean;
   claimed_by: string | null;
   created_at: string;
 }

@@ -64,6 +64,9 @@ create table if not exists public.players (
 );
 alter table public.players enable row level security;
 create unique index if not exists players_group_name_idx on public.players (group_id, lower(btrim(name)));
+-- Guests play in a game without being part of the group. They count towards
+-- balances (they can win or owe money) but are left off the leaderboard.
+alter table public.players add column if not exists is_guest boolean not null default false;
 
 create table if not exists public.games (
   id           uuid primary key default gen_random_uuid(),
@@ -442,8 +445,8 @@ begin
   if (select count(*) from group_members where user_id = v_uid) >= 20 then
     perform _fail('FT422', 'You can be in at most 20 groups.');
   end if;
-  if p_player_names is null or cardinality(p_player_names) < 2 then
-    perform _fail('FT422', 'Add at least two players.');
+  if p_player_names is null or cardinality(p_player_names) < 1 then
+    perform _fail('FT422', 'Add at least one player (you).');
   end if;
   if cardinality(p_player_names) > 40 then perform _fail('FT422', 'A group can start with at most 40 players.'); end if;
   insert into profiles (id, display_name) values (v_uid, 'Player') on conflict (id) do nothing;
@@ -550,7 +553,8 @@ end $$;
 -- Players
 -- ---------------------------------------------------------------------------
 
-create or replace function public.add_player(p_group uuid, p_name text) returns uuid
+drop function if exists public.add_player(uuid, text);
+create or replace function public.add_player(p_group uuid, p_name text, p_guest boolean default false) returns uuid
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_id uuid; v_name text := _clean_text(p_name, 'Player name', 40, true);
 begin
@@ -559,11 +563,11 @@ begin
     perform _fail('FT422', 'A group can have at most 100 players.');
   end if;
   begin
-    insert into players (group_id, name) values (p_group, v_name) returning id into v_id;
+    insert into players (group_id, name, is_guest) values (p_group, v_name, coalesce(p_guest, false)) returning id into v_id;
   exception when unique_violation then
     perform _fail('FT409', 'There is already a player called "' || v_name || '".');
   end;
-  perform _audit(p_group, 'player.added', 'player', v_id, jsonb_build_object('name', v_name));
+  perform _audit(p_group, case when p_guest then 'player.guest_added' else 'player.added' end, 'player', v_id, jsonb_build_object('name', v_name));
   return v_id;
 end $$;
 
@@ -587,6 +591,29 @@ begin
     jsonb_build_object('from', v_p.name, 'to', v_name, 'active', coalesce(p_active, v_p.active)));
 end $$;
 
+-- For someone who has joined but isn't on the player list yet: add a player
+-- with their name and claim it in one step.
+create or replace function public.add_me_as_player(p_group uuid, p_name text) returns uuid
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_uid uuid := _uid(); v_id uuid; v_name text := _clean_text(p_name, 'Your name', 40, true);
+begin
+  perform _require_member(p_group);
+  if exists (select 1 from players where group_id = p_group and claimed_by = v_uid) then
+    perform _fail('FT409', 'You already have a player in this group.');
+  end if;
+  if (select count(*) from players where group_id = p_group) >= 100 then
+    perform _fail('FT422', 'A group can have at most 100 players.');
+  end if;
+  begin
+    insert into players (group_id, name, claimed_by) values (p_group, v_name, v_uid) returning id into v_id;
+  exception when unique_violation then
+    perform _fail('FT409', 'There is already a player called "' || v_name || '". If that''s you, tap "This is me" next to it.');
+  end;
+  perform _audit(p_group, 'player.added', 'player', v_id, jsonb_build_object('name', v_name));
+  perform _audit(p_group, 'player.claimed', 'player', v_id, jsonb_build_object('name', v_name));
+  return v_id;
+end $$;
+
 create or replace function public.claim_player(p_player uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_uid uuid := _uid(); v_p players%rowtype;
@@ -599,7 +626,7 @@ begin
   if exists (select 1 from players where group_id = v_p.group_id and claimed_by = v_uid) then
     perform _fail('FT409', 'You have already claimed a player in this group. Unclaim it first.');
   end if;
-  update players set claimed_by = v_uid where id = p_player;
+  update players set claimed_by = v_uid, is_guest = false where id = p_player;
   perform _audit(v_p.group_id, 'player.claimed', 'player', p_player, jsonb_build_object('name', v_p.name));
 end $$;
 
@@ -1277,8 +1304,8 @@ grant execute on function
   public.create_group(text, text[], integer), public.rename_group(uuid, text),
   public.preview_invite(text), public.join_group(text), public.regenerate_invite(uuid),
   public.set_member_role(uuid, uuid, text), public.remove_member(uuid, uuid),
-  public.add_player(uuid, text), public.update_player(uuid, text, boolean),
-  public.claim_player(uuid), public.unclaim_player(uuid),
+  public.add_player(uuid, text, boolean), public.update_player(uuid, text, boolean),
+  public.claim_player(uuid), public.unclaim_player(uuid), public.add_me_as_player(uuid, text),
   public.save_game_draft(uuid, uuid, integer, text, date, text, jsonb, uuid),
   public.delete_draft(uuid, integer), public.finalise_game(uuid, integer),
   public.start_live_game(uuid, text, date, integer, uuid[], uuid), public.live_join(uuid, uuid, integer),

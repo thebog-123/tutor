@@ -68,7 +68,7 @@ export function leaderboard(
     }
   }
   const names = new Map(players.map((p) => [p.id, p.name]));
-  const rows = [...acc.entries()].map(([playerId, r]) => ({
+  const rows = [...acc.entries()].filter(([playerId]) => names.has(playerId)).map(([playerId, r]) => ({
     playerId,
     name: names.get(playerId) ?? 'Unknown player',
     profit: r.profit,

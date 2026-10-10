@@ -132,13 +132,19 @@ variables is missing or misspelled. Fix it and run the workflow again.
 
 1. Open the site, tap **Create account**, and sign up with your name, email and
    a password.
-2. Tap **Create a group**, give it a name, and type your friends' names into the
-   eight player slots (you can rename, add or archive players later). Tap ♠ next
-   to your own name to claim it, then **Create group**. You're the admin.
-3. On the **Group** tab, tap **Share link** (or **Copy**) and send the invite
-   link to your group chat.
+2. Tap **Create a group** and give it a name. Just you is fine; you can add
+   friends' names too. Tap **Create group**. You're the admin.
+3. You land on **Invite friends**: tap **Share link**, **Copy**, or let friends
+   scan the QR code. (It's also under **You → Group & invites**, and **+ Invite
+   friends** on Home.)
 4. Each friend opens the link, creates their own account, taps **Join group**,
-   then taps **This is me** next to their name.
+   then taps **This is me** next to their name, or **Add me as a new player**.
+
+**Guests:** someone playing just one night can be added with **+ Add guest**
+(game form) or **Add player or guest** (live game). They need no account, their
+money counts towards settling up, and they're left off the leaderboard unless you
+tick **Show guests**. If they join the group later, they can claim their guest
+player and keep their results.
 5. Optional: on the Group tab, make one or two others admins with **Make admin**.
 
 **After a game:** anyone taps **Record a game**, picks who played, and enters

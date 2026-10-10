@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { supabase, rpc, select } from '../supabase';
 import { useGroup } from '../data';
-import { appUrl, navigate } from '../router';
+import { navigate } from '../router';
 import { errorMessage } from '../errors';
 import { toCSV, penceToDecimal } from '../lib/csv';
 import { validateBackup, type BackupSummary } from '../lib/backup';
 import { entryProfit, totalIn } from '../lib/stats';
 import { Banner, Confirm, ErrorBanner, SectionTitle, Sheet, Skeleton, Avatar, download, formatDate, formatDateTime, todayISO, useToast } from '../ui';
 import { AccountCard } from './Groups';
+import { InviteCard, inviteLink } from './Invite';
+import { AddMeButton } from './Overview';
 import type { AuditRow, Member, Player } from '../types';
 
 export function GroupSettings() {
@@ -47,50 +49,12 @@ function InviteSection() {
   const g = useGroup();
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
-  const link = appUrl(`/join/${g.group.invite_code}`);
   return (
     <div className="stack-sm">
       <SectionTitle title="Invite friends" />
       <div className="card stack">
-        <p className="small muted">Send this link to your friends. They create their own account, join, then claim their player.</p>
-        <div className="code">{link}</div>
-        <div className="btn-row">
-          <button
-            className="btn primary"
-            onClick={async () => {
-              const text = `Join our poker group "${g.group.name}" on Felt: ${link}`;
-              if (navigator.share) {
-                try {
-                  await navigator.share({ title: 'Join on Felt', text, url: link });
-                  return;
-                } catch {
-                  /* cancelled: fall through to copy */
-                }
-              }
-              try {
-                await navigator.clipboard.writeText(link);
-                toast.show('Invite link copied');
-              } catch {
-                toast.show('Copy the link above', 'error');
-              }
-            }}
-          >
-            Share link
-          </button>
-          <button
-            className="btn"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(link);
-                toast.show('Invite link copied');
-              } catch {
-                toast.show('Select the link above and copy it', 'error');
-              }
-            }}
-          >
-            Copy
-          </button>
-        </div>
+        <p className="small muted">Send this link to your friends. They create their own account, join, then claim or add their player.</p>
+        <InviteCard link={inviteLink(g.group.invite_code)} message={`Join our poker group "${g.group.name}" on Felt`} showQr={false} />
         {g.me.isAdmin && (
           <button className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setConfirm(true)}>
             Replace link (stops the old one working)
@@ -207,6 +171,7 @@ function PlayersSection() {
                   <b className="ellipsis">{p.name}</b>
                   {mine && <span className="badge lime">You</span>}
                   {!p.active && <span className="badge">Archived</span>}
+                  {p.is_guest && <span className="badge">Guest</span>}
                 </span>
                 <span className="small muted">{p.claimed_by ? (mine ? 'Claimed by you' : `Claimed by ${g.personName(p.claimed_by)}`) : 'Not claimed yet'}</span>
               </span>
@@ -229,7 +194,19 @@ function PlayersSection() {
           );
         })}
       </ul>
-      <p className="tiny faint">Anyone can add a player. Archived players stay in past results but are hidden when recording new games.</p>
+      {!g.me.player && (
+        <div className="card stack-sm">
+          <b>Not on the list?</b>
+          <span className="small muted">Add yourself as a new player, or tap “This is me” next to your name above.</span>
+          <div>
+            <AddMeButton />
+          </div>
+        </div>
+      )}
+      <p className="tiny faint">
+        Anyone can add a player. Guests play in games without being part of the group and are left off the leaderboard; if they join later they can
+        claim their guest player. Archived players stay in past results but are hidden when recording new games.
+      </p>
 
       {adding && <PlayerSheet onClose={() => setAdding(false)} />}
       {editing && <PlayerSheet player={editing} onClose={() => setEditing(null)} />}
@@ -270,6 +247,7 @@ function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
   const [active, setActive] = useState(player?.active ?? true);
+  const [guest, setGuest] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   return (
@@ -282,7 +260,7 @@ function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void
           setError(null);
           try {
             if (player) await rpc('update_player', { p_player: player.id, p_name: name, p_active: g.me.isAdmin ? active : null });
-            else await rpc('add_player', { p_group: g.group.id, p_name: name });
+            else await rpc('add_player', { p_group: g.group.id, p_name: name, p_guest: guest });
             await g.reload();
             toast.show(player ? 'Player updated' : `${name.trim()} added`);
             onClose();
@@ -296,6 +274,12 @@ function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void
           <label htmlFor="player-name">Name</label>
           <input id="player-name" className="input" maxLength={40} autoFocus value={name} onChange={(e) => setName(e.target.value)} />
         </div>
+        {!player && (
+          <label className="row" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={guest} onChange={(e) => setGuest(e.target.checked)} style={{ width: 22, height: 22 }} />
+            <span>Guest: just playing, not part of the group (left off the leaderboard)</span>
+          </label>
+        )}
         {player && g.me.isAdmin && (
           <label className="row" style={{ minHeight: 44 }}>
             <input type="checkbox" checked={!active} onChange={(e) => setActive(!e.target.checked)} style={{ width: 22, height: 22 }} />

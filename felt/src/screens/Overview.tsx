@@ -4,14 +4,45 @@ import { leaderboard, entryProfit, gameTotals } from '../lib/stats';
 import { simplifyDebts } from '../lib/settle';
 import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
-import { Banner, Empty, Money, SectionTitle, formatDate } from '../ui';
+import { Banner, Empty, Money, SectionTitle, formatDate, useToast } from '../ui';
+import { addMeAsPlayer } from '../lib/me';
+import { useSession } from '../session';
+import { errorMessage } from '../errors';
+import { useState } from 'react';
+
+/** "I'm not on the list": add the signed-in person as a new player. */
+export function AddMeButton({ label = 'Add me as a new player' }: { label?: string }) {
+  const g = useGroup();
+  const { displayName } = useSession();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn small"
+      disabled={busy || !displayName}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await addMeAsPlayer(g.group.id, displayName);
+          await g.reload();
+          toast.show(`Added you as ${displayName}`);
+        } catch (e) {
+          toast.show(errorMessage(e), 'error');
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <span className="spinner" /> : label}
+    </button>
+  );
+}
 
 export function Overview() {
   const g = useGroup();
   const base = `#/g/${g.group.id}`;
   const myPlayer = g.me.player;
   const myBalance = myPlayer ? g.balances.find((b) => b.player_id === myPlayer.id) : undefined;
-  const allTime = useMemo(() => leaderboard(g.games, g.players, 'all'), [g.games, g.players]);
+  const allTime = useMemo(() => leaderboard(g.games, g.players.filter((p) => !p.is_guest), 'all'), [g.games, g.players]);
   const myRow = myPlayer ? allTime.find((r) => r.playerId === myPlayer.id) : undefined;
   const finals = g.games.filter((x) => x.status === 'final');
   const lastGame = finals[0];
@@ -39,9 +70,12 @@ export function Overview() {
             <span>
               <b>Which player are you?</b> Claim your player so your results and balance show up here.
             </span>
-            <a className="btn small" style={{ alignSelf: 'flex-start' }} href={`${base}/group`}>
-              Claim my player
-            </a>
+            <div className="row wrap">
+              <a className="btn small" href={`${base}/group`}>
+                Find my name
+              </a>
+              <AddMeButton />
+            </div>
           </div>
         </Banner>
       )}
@@ -100,6 +134,18 @@ export function Overview() {
         </div>
       )}
 
+      {g.members.length < 2 && (
+        <div className="card felt stack-sm">
+          <b>You're the only one here so far</b>
+          <span className="small" style={{ opacity: 0.85 }}>
+            Send your friends the invite link, or let them scan the QR code at the table.
+          </span>
+          <a className="btn primary" style={{ alignSelf: 'flex-start' }} href={`${base}/invite`}>
+            Invite friends
+          </a>
+        </div>
+      )}
+
       {live.map((game) => {
         const playing = game.entries.filter((e) => e.cash_out_pence === null).length;
         const meIn = myPlayer && game.entries.some((e) => e.player_id === myPlayer.id);
@@ -125,6 +171,11 @@ export function Overview() {
           Record a game
         </a>
       </div>
+      {g.members.length >= 2 && (
+        <a className="btn ghost small" style={{ alignSelf: 'center' }} href={`${base}/invite`}>
+          + Invite friends
+        </a>
+      )}
 
       {(myDrafts.length > 0 || pending.length > 0) && (
         <div className="stack-sm">

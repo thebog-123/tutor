@@ -72,6 +72,7 @@ export function GameEditor({ gameId }: { gameId?: string }) {
   const [showErrors, setShowErrors] = useState(false);
   const [review, setReview] = useState(false);
   const [rebuyFor, setRebuyFor] = useState<string | null>(null);
+  const [addingGuest, setAddingGuest] = useState(false);
   const restored = useRef(mode === 'new' && loadSaved(groupId) !== null);
 
   // Keep an unsent new game on this device so a refresh or lost signal doesn't lose it.
@@ -177,11 +178,12 @@ export function GameEditor({ gameId }: { gameId?: string }) {
             <button key={p.id} type="button" className={selected.has(p.id) ? 'on' : ''} aria-pressed={selected.has(p.id)} onClick={() => togglePlayer(p.id)}>
               {selected.has(p.id) ? '✓ ' : ''}
               {p.name}
+              {p.is_guest ? ' (guest)' : ''}
             </button>
           ))}
-          <a className="btn ghost small" href={`#/g/${groupId}/group`}>
-            + Add a player
-          </a>
+          <button type="button" className="btn ghost small" onClick={() => setAddingGuest(true)}>
+            + Add guest
+          </button>
         </div>
       </div>
 
@@ -283,6 +285,18 @@ export function GameEditor({ gameId }: { gameId?: string }) {
           Review
         </button>
       </div>
+
+      {addingGuest && (
+        <GuestSheet
+          onClose={() => setAddingGuest(false)}
+          onAdd={async (name) => {
+            const id = await rpc<string>('add_player', { p_group: groupId, p_name: name, p_guest: true });
+            await g.reload();
+            setState((s) => ({ ...s, rows: [...s.rows, { player_id: id, buy_in: s.standard, rebuys: [], cash_out: null }] }));
+            setAddingGuest(false);
+          }}
+        />
+      )}
 
       {rebuyFor && (
         <RebuySheet
@@ -489,6 +503,41 @@ function ReviewSheet({
           Keep editing
         </button>
       </div>
+    </Sheet>
+  );
+}
+
+function GuestSheet({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string) => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  return (
+    <Sheet title="Add a guest" onClose={busy ? () => undefined : onClose}>
+      <form
+        className="stack"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!name.trim() || busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            await onAdd(name);
+          } catch (err) {
+            setError(err);
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="field">
+          <label htmlFor="guest">Guest's name</label>
+          <input id="guest" className="input" maxLength={40} autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          <span className="hint">For someone playing tonight who isn't part of the group. They don't need an account and are left off the leaderboard.</span>
+        </div>
+        <ErrorBanner error={error} />
+        <button className="btn primary block" disabled={busy || !name.trim()}>
+          {busy ? <span className="spinner" /> : 'Add guest'}
+        </button>
+      </form>
     </Sheet>
   );
 }

@@ -147,3 +147,45 @@ suite('deleting a group', () => {
     await fails(ann.rpc('get_balances', { p_group: groupId }), 'FT403');
   });
 });
+
+suite('starting small', () => {
+  it('creates a group with just its creator, and lets a friend add themselves after joining', async () => {
+    const [ann, bea] = await Promise.all([newUser('solo-a'), newUser('solo-b')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Just me', p_player_names: ['Ann'], p_claim_index: 1 }));
+    await fails(ann.rpc('create_group', { p_name: 'Nobody', p_player_names: [], p_claim_index: null }), 'FT422');
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    await fails(bea.rpc('add_me_as_player', { p_group: groupId, p_name: 'ann' }), 'FT409', /This is me/);
+    const id = await ok(bea.rpc('add_me_as_player', { p_group: groupId, p_name: 'Bea' }));
+    await fails(bea.rpc('add_me_as_player', { p_group: groupId, p_name: 'Bea 2' }), 'FT409', /already have a player/);
+    const beaId = (await bea.auth.getUser()).data.user!.id;
+    expect(await ok(ann.from('players').select('name,claimed_by').eq('id', id).single())).toEqual({ name: 'Bea', claimed_by: beaId });
+    const outsider = await newUser('solo-c');
+    await fails(outsider.rpc('add_me_as_player', { p_group: groupId, p_name: 'Cat' }), 'FT403');
+  });
+});
+
+suite('guests', () => {
+  it('adds a guest who plays and owes money but stays off the leaderboard until they claim it', async () => {
+    const [ann, gus] = await Promise.all([newUser('g-ann'), newUser('g-gus')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Guests', p_player_names: ['Ann'], p_claim_index: 1 }));
+    const guest = await ok(ann.rpc('add_player', { p_group: groupId, p_name: 'Gus', p_guest: true }));
+    const annPlayer = (await ok(ann.from('players').select('id').eq('group_id', groupId).eq('name', 'Ann').single())).id;
+    const game = await ok(ann.rpc('start_live_game', { p_group: groupId, p_name: 'n', p_played_on: '2026-10-09', p_standard_buy_in: 1000, p_players: [annPlayer, guest] }));
+    await ok(ann.rpc('live_cash_out', { p_game: game, p_player: annPlayer, p_amount: 2000 }));
+    await ok(ann.rpc('live_cash_out', { p_game: game, p_player: guest, p_amount: 0 }));
+    const v = await ok(ann.rpc('end_live_game', { p_game: game }));
+    await ok(ann.rpc('finalise_game', { p_game: game, p_expected_version: v }));
+    const bal = await ok(ann.rpc('get_balances', { p_group: groupId }));
+    expect(bal.find((b: { player_id: string }) => b.player_id === guest).balance_pence).toBe(-1000);
+    // The guest pays the host; the admin confirms for the guest (nobody is signed in as them).
+    const pay = await ok(ann.rpc('record_payment', { p_group: groupId, p_from: guest, p_to: annPlayer, p_amount_pence: 1000, p_note: 'cash' }));
+    await ok(ann.rpc('confirm_payment', { p_payment: pay }));
+    expect((await ok(ann.from('payments').select('status').eq('id', pay).single())).status).toBe('confirmed');
+    // Later Gus joins the group and claims his guest player: he becomes a regular player.
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(gus.rpc('join_group', { p_code: invite_code }));
+    await ok(gus.rpc('claim_player', { p_player: guest }));
+    expect((await ok(ann.from('players').select('is_guest').eq('id', guest).single())).is_guest).toBe(false);
+  });
+});

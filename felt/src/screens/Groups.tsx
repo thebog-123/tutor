@@ -267,18 +267,18 @@ export function AccountCard() {
   );
 }
 
-const DEFAULT_PLAYERS = ['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Player 5', 'Player 6', 'Player 7', 'Player 8'];
+
 
 export function CreateGroupScreen() {
   const { displayName } = useSession();
   const [name, setName] = useState('');
-  const [players, setPlayers] = useState<string[]>(DEFAULT_PLAYERS);
+  const [players, setPlayers] = useState<string[]>(['']);
   const [claim, setClaim] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (displayName && players[0] === 'Player 1') setPlayers((p) => [displayName, ...p.slice(1)]);
+    if (displayName && players[0] === '') setPlayers((p) => [displayName, ...p.slice(1)]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayName]);
 
@@ -295,14 +295,14 @@ export function CreateGroupScreen() {
         setError('');
         const names = trimmed.filter(Boolean);
         if (!name.trim()) return setError('Give your group a name.');
-        if (names.length < 2) return setError('Add at least two players.');
+        if (names.length < 1) return setError('Add yourself as a player.');
         if (dupes.length) return setError(`Two players are called "${dupes[0]}". Names must be different.`);
         setBusy(true);
         try {
           const claimName = trimmed[claim];
           const claimIndex = claimName ? names.indexOf(claimName) + 1 : null;
           const id = await rpc<string>('create_group', { p_name: name, p_player_names: names, p_claim_index: claimIndex });
-          navigate(`/g/${id}/group`, true);
+          navigate(`/g/${id}/invite`, true);
         } catch (err) {
           setError(errorMessage(err));
           setBusy(false);
@@ -322,7 +322,9 @@ export function CreateGroupScreen() {
       </div>
       <div className="stack">
         <SectionTitle title="Players" />
-        <p className="small muted">Start with eight. Tap ♠ next to your own name so your results are linked to your account.</p>
+        <p className="small muted">
+          Just you is fine. Friends add themselves when they join with your invite link, or you can add their names now. The ♠ marks your own player.
+        </p>
         {players.map((p, i) => (
           <div className="row" key={i}>
             <button
@@ -342,7 +344,7 @@ export function CreateGroupScreen() {
               value={p}
               onChange={(e) => setPlayers(players.map((q, j) => (j === i ? e.target.value : q)))}
             />
-            {players.length > 2 && (
+            {players.length > 1 && (
               <button
                 type="button"
                 className="icon-btn"
@@ -372,7 +374,7 @@ export function CreateGroupScreen() {
 
 type Preview = { group_id: string; name: string; member_count: number; is_sample: boolean; already_member: boolean };
 
-export function JoinScreen({ code }: { code: string }) {
+export function JoinScreen({ code, gameId }: { code: string; gameId?: string }) {
   const [preview, setPreview] = useState<Preview | null | undefined>(undefined);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -408,7 +410,7 @@ export function JoinScreen({ code }: { code: string }) {
         </p>
       </div>
       {preview.already_member ? (
-        <a className="btn primary block" href={`#/g/${preview.group_id}`}>
+        <a className="btn primary block" href={gameId ? `#/g/${preview.group_id}/games/${gameId}` : `#/g/${preview.group_id}`}>
           You're already a member. Open group
         </a>
       ) : (
@@ -419,7 +421,7 @@ export function JoinScreen({ code }: { code: string }) {
             setBusy(true);
             try {
               const id = await rpc<string>('join_group', { p_code: code });
-              navigate(`/g/${id}/group?claim`, true);
+              navigate(gameId ? `/g/${id}/games/${gameId}` : `/g/${id}/group?claim`, true);
             } catch (e) {
               setError(e);
               setBusy(false);

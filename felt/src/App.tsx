@@ -13,6 +13,7 @@ import { Payments } from './screens/Payments';
 import { GroupSettings } from './screens/GroupSettings';
 import { StartLiveGame } from './screens/LiveGame';
 import { You, pendingActions } from './screens/You';
+import { InviteScreen } from './screens/Invite';
 import { Avatar } from './ui';
 import { Banner, ErrorBanner, PageLoading, Skeleton } from './ui';
 import { toFeltError } from './errors';
@@ -33,7 +34,7 @@ export function App() {
   if (session === undefined) return <PageLoading label="Opening Felt…" />;
   if (recovering && session) return <NewPasswordScreen />;
   if (!session) {
-    if (route[0] === 'join' && route[1]) rememberInvite(route[1]);
+    if (route[0] === 'join' && route[1]) rememberInvite(route.slice(1, 3).join('/'));
     return <AuthScreen invited={route[0] === 'join'} />;
   }
 
@@ -46,7 +47,7 @@ export function App() {
     );
   }
   let body: ReactNode;
-  if (section === 'join' && id) body = <JoinScreen code={id} />;
+  if (section === 'join' && id) body = <JoinScreen code={id} gameId={rest[0]} />;
   else if (section === 'new') body = <CreateGroupScreen />;
   else if (section === 'groups') body = <GroupsScreen />;
   else body = <Redirect to={lastGroup() ? `/g/${lastGroup()}` : '/groups?auto'} />;
@@ -164,6 +165,7 @@ function GroupShell({ groupId, rest }: { groupId: string; rest: string[] }) {
     else if (tab === 'payments') body = <Payments />;
     else if (tab === 'group') body = <GroupSettings />;
     else if (tab === 'you') body = <You section={rest[1]} />;
+    else if (tab === 'invite') body = <InviteScreen />;
     else body = <Redirect to={`/g/${groupId}`} />;
   }
 

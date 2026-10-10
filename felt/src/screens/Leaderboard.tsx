@@ -55,7 +55,12 @@ export function Leaderboard() {
   const [range, setRange] = useState<Range>(() => stored('felt.range', 'all', ['all', 'year', 'month']));
   const [sort, setSort] = useState<SortKey>(() => stored('felt.sort', 'profit', SORTS.map((s) => s.key)));
   const [dir, setDir] = useState<Dir>(() => stored('felt.sortDir', 'desc', ['desc', 'asc']));
-  const rows = useMemo(() => sortLeaderboard(leaderboard(g.games, g.players, range), sort, dir), [g.games, g.players, range, sort, dir]);
+  const [showGuests, setShowGuests] = useState(false);
+  const hasGuests = g.players.some((p) => p.is_guest);
+  const rows = useMemo(
+    () => sortLeaderboard(leaderboard(g.games, g.players.filter((p) => showGuests || !p.is_guest), range), sort, dir),
+    [g.games, g.players, range, sort, dir, showGuests],
+  );
   const sortLabel = SORTS.find((s) => s.key === sort)!.label;
 
   const chooseSort = (key: SortKey) => {
@@ -113,6 +118,12 @@ export function Leaderboard() {
         </div>
       </div>
 
+      {hasGuests && (
+        <label className="row small muted" style={{ minHeight: 40 }}>
+          <input type="checkbox" checked={showGuests} onChange={(e) => setShowGuests(e.target.checked)} style={{ width: 20, height: 20 }} />
+          Show guests
+        </label>
+      )}
       {rows.length === 0 ? (
         <Empty title={range === 'all' ? 'No finalised games yet' : `No finalised games ${range === 'year' ? 'this year' : 'this month'}`}>
           Rankings appear once an admin finalises a game.
@@ -133,6 +144,7 @@ export function Leaderboard() {
                     <span className="row" style={{ gap: 6 }}>
                       <b className="ellipsis">{r.name}</b>
                       {mine && <span className="badge lime">You</span>}
+                      {g.playersById.get(r.playerId)?.is_guest && <span className="badge">Guest</span>}
                     </span>
                     <span className="small muted num">
                       {sort !== 'profit' && (

@@ -6,6 +6,9 @@ import { formatPence } from '../lib/money';
 import { entryProfit, gameTotals, totalIn } from '../lib/stats';
 import { Avatar, Banner, Confirm, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, todayISO, useToast } from '../ui';
 import type { Entry, Game } from '../types';
+import { useSession } from '../session';
+import { addMeAsPlayer } from '../lib/me';
+import { InviteCard, inviteLink } from './Invite';
 
 /** Start a game that's played live: players join, rebuy and cash out from their own phones. */
 export function StartLiveGame() {
@@ -100,7 +103,8 @@ type Dialog =
   | { kind: 'cashout'; entry: Entry }
   | { kind: 'remove'; entry: Entry }
   | { kind: 'end' }
-  | { kind: 'delete' };
+  | { kind: 'delete' }
+  | { kind: 'invite' };
 
 export function LiveGame({ game }: { game: Game }) {
   const g = useGroup();
@@ -110,6 +114,7 @@ export function LiveGame({ game }: { game: Game }) {
   const [error, setError] = useState<unknown>(null);
   const standard = game.standard_buy_in_pence ?? 2000;
   const canEnd = g.me.isAdmin || game.created_by === g.me.userId;
+  const { displayName } = useSession();
 
   // Realtime pushes changes instantly; this is a safety net if the connection drops.
   useEffect(() => {
@@ -246,15 +251,36 @@ export function LiveGame({ game }: { game: Game }) {
       <ErrorBanner error={error} />
 
       <div className="btn-row">
+        {!g.me.player && (
+          <button
+            className="btn primary"
+            disabled={busyPlayer === 'me'}
+            onClick={() =>
+              act(
+                'me',
+                async () => {
+                  const id = await addMeAsPlayer(g.group.id, displayName);
+                  await rpc('live_join', { p_game: game.id, p_player: id, p_buy_in: standard });
+                },
+                `You're in for ${formatPence(standard)}`,
+              )
+            }
+          >
+            Join for {formatPence(standard)}
+          </button>
+        )}
         {g.me.player && !meIn && (
           <button className="btn primary" disabled={busyPlayer === 'me'} onClick={() => act('me', () => rpc('live_join', { p_game: game.id, p_player: g.me.player!.id, p_buy_in: standard }), `You're in for ${formatPence(standard)}`)}>
             Join for {formatPence(standard)}
           </button>
         )}
         <button className="btn" onClick={() => setDialog({ kind: 'join' })}>
-          + Add a player
+          + Add player or guest
         </button>
       </div>
+      <button className="btn ghost small" style={{ alignSelf: 'center' }} onClick={() => setDialog({ kind: 'invite' })}>
+        Invite someone to this game
+      </button>
 
       <div className="stack-sm">
         <SectionTitle title={`Playing (${playing.length})`} />
@@ -288,6 +314,17 @@ export function LiveGame({ game }: { game: Game }) {
       </div>
 
       {dialog?.kind === 'join' && <JoinSheet game={game} standard={standard} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'invite' && (
+        <Sheet title="Invite to this game" onClose={() => setDialog(null)}>
+          <div className="stack">
+            <p className="small muted">
+              They create an account (or sign in), join {g.group.name}, and land on this game. For someone who's only here tonight, use{' '}
+              <b>Add player or guest</b> instead. They don't need an account.
+            </p>
+            <InviteCard link={inviteLink(g.group.invite_code, game.id)} message={`Join our poker game "${game.name}" on Felt`} />
+          </div>
+        </Sheet>
+      )}
       {dialog?.kind === 'rebuy' && (
         <AmountSheet
           title={`Rebuy for ${g.playerName(dialog.entry.player_id)}`}
@@ -381,6 +418,7 @@ export function LiveGame({ game }: { game: Game }) {
 function JoinSheet({ game, standard, onClose }: { game: Game; standard: number; onClose: () => void }) {
   const g = useGroup();
   const [player, setPlayer] = useState('');
+  const [guestName, setGuestName] = useState('');
   const [buyIn, setBuyIn] = useState<number | null>(standard);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -395,7 +433,8 @@ function JoinSheet({ game, standard, onClose }: { game: Game; standard: number; 
           setBusy(true);
           setError(null);
           try {
-            await rpc('live_join', { p_game: game.id, p_player: player, p_buy_in: buyIn });
+            const id = guestName.trim() ? await rpc<string>('add_player', { p_group: g.group.id, p_name: guestName, p_guest: true }) : player;
+            await rpc('live_join', { p_game: game.id, p_player: id, p_buy_in: buyIn });
             await g.reload();
             onClose();
           } catch (err) {
@@ -404,23 +443,44 @@ function JoinSheet({ game, standard, onClose }: { game: Game; standard: number; 
           }
         }}
       >
-        {options.length === 0 ? (
-          <Banner tone="info">
-            Everyone is already in. To add someone new, add them as a player on the <a href={`#/g/${g.group.id}/group`}>Group page</a> first.
-          </Banner>
-        ) : (
+        {options.length > 0 && (
           <div className="pill-toggle" role="group" aria-label="Player">
             {options.map((p) => (
-              <button type="button" key={p.id} className={player === p.id ? 'on' : ''} aria-pressed={player === p.id} onClick={() => setPlayer(p.id)}>
+              <button
+                type="button"
+                key={p.id}
+                className={player === p.id && !guestName.trim() ? 'on' : ''}
+                aria-pressed={player === p.id}
+                onClick={() => {
+                  setPlayer(p.id);
+                  setGuestName('');
+                }}
+              >
                 {p.name}
+                {p.is_guest ? ' (guest)' : ''}
               </button>
             ))}
           </div>
         )}
+        <div className="field">
+          <label htmlFor="guest-name">{options.length ? 'Or add a guest' : 'Add a guest'}</label>
+          <input
+            id="guest-name"
+            className="input"
+            maxLength={40}
+            placeholder="Their name: someone just here for tonight"
+            value={guestName}
+            onChange={(e) => {
+              setGuestName(e.target.value);
+              if (e.target.value.trim()) setPlayer('');
+            }}
+          />
+          <span className="hint">Guests don't need an account and are left off the leaderboard. Their money still counts.</span>
+        </div>
         <MoneyInput id="join-buyin" label="Buy-in" value={buyIn} onChange={setBuyIn} />
         <ErrorBanner error={error} />
-        <button className="btn primary block" disabled={busy || !player || !buyIn}>
-          {busy ? <span className="spinner" /> : 'Add to game'}
+        <button className="btn primary block" disabled={busy || (!player && !guestName.trim()) || !buyIn}>
+          {busy ? <span className="spinner" /> : guestName.trim() ? `Add ${guestName.trim()} as a guest` : 'Add to game'}
         </button>
       </form>
     </Sheet>

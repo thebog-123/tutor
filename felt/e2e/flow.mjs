@@ -38,13 +38,19 @@ await alice.getByRole('heading', { name: 'Your groups' }).waitFor();
 await shot(alice, '01-groups-empty');
 await alice.getByRole('link', { name: 'Create a group' }).click();
 await alice.getByLabel('Group name').fill('Friday Felt');
-const names = ['Alice', 'Ben', 'Chloe', 'Dev', 'Ella', 'Finn', 'Grace', 'Hari'];
-for (let i = 0; i < 8; i++) await alice.getByLabel(`Player ${i + 1} name`).fill(names[i]);
+// Starts with just Alice; she adds three names, the rest can add themselves later.
+const names = ['Alice', 'Ben', 'Chloe', 'Dev'];
+if ((await alice.getByLabel('Player 1 name').inputValue()) !== 'Alice') errors.push('creator not prefilled');
+for (let i = 1; i < names.length; i++) {
+  await alice.getByRole('button', { name: '+ Add player' }).click();
+  await alice.getByLabel(`Player ${i + 1} name`).fill(names[i]);
+}
 await shot(alice, '02-create-group');
 await alice.getByRole('button', { name: 'Create group' }).click();
-await alice.getByText('Invite friends').waitFor();
+await alice.getByRole('heading', { name: 'Your group is ready' }).waitFor();
+await alice.locator('.qr svg').waitFor();
 const invite = (await alice.locator('.code').textContent()).trim();
-await shot(alice, '03-group-page');
+await shot(alice, '03-invite-screen');
 
 // --- Bob joins through the invite link
 const bob = await newPage();
@@ -135,16 +141,43 @@ await bob.locator('.entry-card').filter({ hasText: 'Ben' }).getByRole('button', 
 await bob.getByText('Ben rebought £20').waitFor();
 // Alice's screen picks up Bob's changes by itself (Realtime, or the 8s safety-net refresh).
 await alice.locator('.entry-card').filter({ hasText: 'Ben' }).getByText('In £40').waitFor({ timeout: 15000 });
+// Cara isn't in the group yet: she opens the game's invite link, signs up, and joins the game as a new player.
+const cara = await newPage();
+const gameId = liveUrl.split('/games/')[1];
+await signUp(cara, 'Cara', `${invite}/${gameId}`);
+await cara.getByRole('button', { name: 'Join group' }).click();
+await cara.locator('.badge.live').first().waitFor();
+await cara.getByRole('button', { name: 'Join for £20' }).click();
+await cara.locator('.entry-card').filter({ hasText: 'Cara' }).getByText('You').waitFor();
+await cara.locator('.entry-card').filter({ hasText: 'Cara' }).getByRole('button', { name: 'Cash out' }).click();
+await cara.getByLabel("Chips they're leaving with").fill('20');
+await cara.getByRole('button', { name: 'Save' }).click();
+await shot(cara, '17c-new-member-joined-live-game');
 await shot(alice, '17-live-game');
 await bob.locator('.entry-card').filter({ hasText: 'Ben' }).getByRole('button', { name: 'Cash out' }).click();
 await bob.getByLabel("Chips they're leaving with").fill('10');
 await bob.getByRole('button', { name: 'Save' }).click();
-await bob.getByText('Cashed out (1)').waitFor();
+await bob.locator('.entry-card').filter({ hasText: 'Ben' }).getByText('Cashed out £10').waitFor();
 await shot(bob, '18-live-cashed-out-early');
-await alice.getByText('Cashed out (1)').waitFor({ timeout: 15000 });
+await alice.locator('.entry-card').filter({ hasText: 'Ben' }).getByText('Cashed out £10').waitFor({ timeout: 15000 });
 await alice.locator('.entry-card').filter({ hasText: 'Alice' }).getByRole('button', { name: 'Cash out' }).click();
 await alice.getByLabel("Chips they're leaving with").fill('50');
 await alice.getByRole('button', { name: 'Save' }).click();
+await alice.getByRole('button', { name: 'End game' }).click();
+await alice.getByText('Ending will finalise it straight away').waitFor();
+await alice.getByRole('button', { name: 'Cancel' }).click();
+// A guest turns up for one game.
+await alice.getByRole('button', { name: '+ Add player or guest' }).click();
+await alice.getByLabel('Or add a guest').fill('Gus');
+await alice.getByRole('button', { name: 'Add Gus as a guest' }).click();
+await alice.locator('.entry-card').filter({ hasText: 'Gus' }).getByRole('button', { name: 'Cash out' }).click();
+await alice.getByLabel("Chips they're leaving with").fill('20');
+await alice.getByRole('button', { name: 'Save' }).click();
+await alice.getByText('Cashed out (4)').waitFor({ timeout: 15000 });
+await alice.getByRole('button', { name: 'Invite someone to this game' }).click();
+await alice.locator('.sheet .qr svg').waitFor();
+await shot(alice, '17b-invite-to-game');
+await alice.getByRole('button', { name: 'Close' }).click();
 await alice.getByRole('button', { name: 'End game' }).click();
 await alice.getByText('Ending will finalise it straight away').waitFor();
 await alice.getByRole('button', { name: 'End game' }).last().click();
@@ -165,6 +198,10 @@ await alice.getByRole('link', { name: 'Leaderboard' }).last().click();
 await alice.getByRole('group', { name: 'Sort by' }).getByRole('button', { name: 'Profit' }).click(); // back to highest first
 await alice.locator('.podium').waitFor();
 await alice.locator('.podium img.avatar').first().waitFor(); // new photo shows without a reload
+if (await alice.locator('ol.list').getByText('Gus').count()) errors.push('guest shown on leaderboard by default');
+await alice.getByLabel('Show guests').check();
+await alice.locator('ol.list').getByText('Gus').waitFor();
+await alice.getByLabel('Show guests').uncheck();
 await shot(alice, '21-leaderboard-podium');
 
 // --- Desktop layout
