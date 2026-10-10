@@ -18,8 +18,6 @@
 --   FT409 changed by someone else / duplicate        FT422 invalid input
 -- =============================================================================
 
-create extension if not exists pgcrypto;
-
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
@@ -241,10 +239,13 @@ returns void language sql security definer set search_path = public, pg_temp as 
   values (p_group, auth.uid(), _actor_name(), p_action, p_entity, p_entity_id, coalesce(p_detail, '{}'::jsonb), p_reason);
 $$;
 
+-- 12 characters from an unambiguous alphabet. Uses only built-in functions
+-- (gen_random_uuid is core Postgres), so it doesn't depend on extensions.
 create or replace function public._new_invite_code() returns text
-language sql volatile as $$
-  select string_agg(substr('abcdefghjkmnpqrstuvwxyz23456789', (get_byte(b, i) % 31) + 1, 1), '')
-  from gen_random_bytes(12) b, generate_series(0, 11) i;
+language sql volatile set search_path = public, pg_temp as $$
+  select string_agg(substr('abcdefghjkmnpqrstuvwxyz23456789', (get_byte(b, i) % 31) + 1, 1), '' order by i)
+  from (select decode(md5(gen_random_uuid()::text || gen_random_uuid()::text), 'hex') as b) r,
+       generate_series(0, 11) i;
 $$;
 
 -- A JSON snapshot of a game and its entries, used for the audit trail and backups.

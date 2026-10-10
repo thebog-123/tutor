@@ -44,6 +44,9 @@ grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create publication supabase_realtime;
+-- Like Supabase: extensions live in their own schema, outside function search paths.
+create schema extensions;
+create extension pgcrypto schema extensions;
 SQL
   chmod 644 "$DIR/roles.sql"
   psql_su "-f $DIR/roles.sql"
