@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase, rpc, select } from '../supabase';
 import { navigate } from '../router';
 import { useSession } from '../session';
-import { useOptionalGroupState } from '../data';
+import { setCachedAvatar, useOptionalGroupState } from '../data';
 import { Avatar, Banner, Empty, ErrorBanner, PageLoading, SectionTitle, Skeleton, photoToAvatar, useToast } from '../ui';
 import { errorMessage } from '../errors';
 import type { Group, Role } from '../types';
@@ -189,7 +189,9 @@ export function AccountCard() {
                   if (!file) return;
                   setPhotoBusy(true);
                   try {
-                    await rpc('update_my_avatar', { p_image: await photoToAvatar(file) });
+                    const image = await photoToAvatar(file);
+                    await rpc('update_my_avatar', { p_image: image });
+                    setCachedAvatar(session!.user.id, image);
                     await refreshAll();
                     toast.show('Profile picture updated');
                   } catch (err) {
@@ -209,6 +211,7 @@ export function AccountCard() {
                   setPhotoBusy(true);
                   try {
                     await rpc('update_my_avatar', { p_image: null });
+                    setCachedAvatar(session!.user.id, null);
                     await refreshAll();
                   } catch (err) {
                     toast.show(errorMessage(err), 'error');

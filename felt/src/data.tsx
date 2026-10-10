@@ -28,6 +28,22 @@ interface GroupState {
 
 const Ctx = createContext<GroupState>(null as unknown as GroupState);
 
+// Profile pictures are ~20-30 KB each and rarely change, so each one is
+// downloaded once per visit and kept here, rather than on every refresh.
+const avatarCache = new Map<string, string | null>();
+
+/** Update the cached picture after the signed-in person changes theirs. */
+export function setCachedAvatar(userId: string, url: string | null) {
+  avatarCache.set(userId, url);
+}
+
+async function loadAvatars(userIds: string[]) {
+  const missing = [...new Set(userIds)].filter((id) => !avatarCache.has(id));
+  if (!missing.length) return;
+  const rows = await select<{ id: string; avatar_url: string | null }[]>(supabase.from('profiles').select('id, avatar_url').in('id', missing));
+  for (const id of missing) avatarCache.set(id, rows.find((r) => r.id === id)?.avatar_url ?? null);
+}
+
 async function loadGroup(groupId: string, userId: string): Promise<GroupData> {
   const [group, members, players, games, payments, balances, profiles] = await Promise.all([
     select<Group>(supabase.from('groups').select('*').eq('id', groupId).maybeSingle()),
@@ -38,9 +54,10 @@ async function loadGroup(groupId: string, userId: string): Promise<GroupData> {
     ),
     select<Payment[]>(supabase.from('payments').select('*').eq('group_id', groupId).order('recorded_at', { ascending: false })),
     rpc<BalanceRow[]>('get_balances', { p_group: groupId }),
-    select<Profile[]>(supabase.from('profiles').select('id, display_name, avatar_url')),
+    select<Omit<Profile, 'avatar_url'>[]>(supabase.from('profiles').select('id, display_name')),
   ]);
-  const profileMap = new Map(profiles.map((p) => [p.id, p]));
+  await loadAvatars([...members.map((m) => m.user_id), ...players.flatMap((p) => (p.claimed_by ? [p.claimed_by] : []))]);
+  const profileMap = new Map<string, Profile>(profiles.map((p) => [p.id, { ...p, avatar_url: avatarCache.get(p.id) ?? null }]));
   const playersById = new Map(players.map((p) => [p.id, p]));
   const meMember = members.find((m) => m.user_id === userId);
   return {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { rpc } from '../supabase';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { rpc, supabase } from '../supabase';
 import { useGroup } from '../data';
 import { navigate } from '../router';
 import { formatPence } from '../lib/money';
@@ -117,14 +117,19 @@ export function LiveGame({ game }: { game: Game }) {
   const canEnd = g.me.isAdmin || game.created_by === g.me.userId;
   const { displayName } = useSession();
 
-  // Realtime pushes changes instantly; this is a safety net if the connection drops.
+  // Realtime pushes changes instantly. As a safety net (if that connection drops),
+  // check every 8s whether the game changed (a few bytes) and only then reload.
+  const versionRef = useRef(game.version);
+  versionRef.current = game.version;
   useEffect(() => {
-    const t = setInterval(() => {
-      if (document.visibilityState === 'visible') void g.reload();
+    const t = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data } = await supabase.from('games').select('version, status').eq('id', game.id).maybeSingle();
+      if (!data || data.version !== versionRef.current || data.status !== 'live') void g.reload();
     }, 8000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [game.id]);
 
   const playing = game.entries.filter((e) => e.cash_out_pence === null);
   const done = game.entries.filter((e) => e.cash_out_pence !== null);
