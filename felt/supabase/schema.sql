@@ -29,6 +29,7 @@ create table if not exists public.profiles (
   display_name text not null check (char_length(btrim(display_name)) between 1 and 40),
   created_at   timestamptz not null default now()
 );
+alter table public.profiles enable row level security;
 
 create table if not exists public.groups (
   id          uuid primary key default gen_random_uuid(),
@@ -38,6 +39,7 @@ create table if not exists public.groups (
   created_by  uuid references auth.users (id) on delete set null,
   created_at  timestamptz not null default now()
 );
+alter table public.groups enable row level security;
 
 create table if not exists public.group_members (
   group_id  uuid not null references public.groups (id) on delete cascade,
@@ -46,6 +48,7 @@ create table if not exists public.group_members (
   joined_at timestamptz not null default now(),
   primary key (group_id, user_id)
 );
+alter table public.group_members enable row level security;
 create index if not exists group_members_user_idx on public.group_members (user_id);
 
 create table if not exists public.players (
@@ -57,6 +60,7 @@ create table if not exists public.players (
   created_at timestamptz not null default now(),
   unique (group_id, claimed_by)
 );
+alter table public.players enable row level security;
 create unique index if not exists players_group_name_idx on public.players (group_id, lower(btrim(name)));
 
 create table if not exists public.games (
@@ -78,6 +82,7 @@ create table if not exists public.games (
   voided_at    timestamptz,
   void_reason  text
 );
+alter table public.games enable row level security;
 create index if not exists games_group_idx on public.games (group_id, played_on desc);
 
 create table if not exists public.game_entries (
@@ -90,6 +95,7 @@ create table if not exists public.game_entries (
   cash_out_pence integer not null check (cash_out_pence >= 0 and cash_out_pence <= 100000000),
   primary key (game_id, player_id)
 );
+alter table public.game_entries enable row level security;
 create index if not exists game_entries_group_idx on public.game_entries (group_id);
 create index if not exists game_entries_player_idx on public.game_entries (player_id);
 
@@ -112,6 +118,7 @@ create table if not exists public.payments (
   close_reason text,
   check (from_player <> to_player)
 );
+alter table public.payments enable row level security;
 create index if not exists payments_group_idx on public.payments (group_id, recorded_at desc);
 
 create table if not exists public.audit_log (
@@ -126,6 +133,7 @@ create table if not exists public.audit_log (
   detail     jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table public.audit_log enable row level security;
 create index if not exists audit_log_group_idx on public.audit_log (group_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
