@@ -1,0 +1,68 @@
+# Felt checks: runs every test on each change to Felt, against a throwaway copy
+# of the backend (Postgres + Supabase Auth + PostgREST) started on the runner.
+# It never touches the real Supabase project.
+name: Felt checks
+
+on:
+  push:
+    paths: ['felt/**', '.github/workflows/felt-ci.yml']
+  pull_request:
+    paths: ['felt/**', '.github/workflows/felt-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: felt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: felt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: felt/package-lock.json
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests (money, settle-up, leaderboard, rivalries, CSV, backups)
+        run: npm run test:unit
+
+      - name: Postgres 16 binaries
+        run: test -x /usr/lib/postgresql/16/bin/postgres || (sudo apt-get update && sudo apt-get install -y postgresql-16)
+      - name: Start the local backend
+        run: sudo env "PATH=$PATH" bash scripts/local-stack.sh start
+      - name: Database tests (permissions, balances, payments, live games, backups)
+        run: npm run test:db
+        env:
+          FELT_REQUIRE_STACK: '1'
+
+      - name: Browser walkthrough
+        run: |
+          npx playwright install --with-deps chromium
+          npm run build
+          node scripts/write-local-config.mjs
+          (npx vite preview --port 4173 --strictPort > preview.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/ > /dev/null && break; sleep 1; done
+          mkdir -p test-results
+          node e2e/flow.mjs test-results
+      - name: Screenshots and logs (if anything failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: felt-test-results
+          path: |
+            felt/test-results
+            felt/preview.log
+            /tmp/felt-stack/*.log
+          retention-days: 7

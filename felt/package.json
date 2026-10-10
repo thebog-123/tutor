@@ -14,7 +14,8 @@
     "stack:start": "bash scripts/local-stack.sh start",
     "stack:stop": "bash scripts/local-stack.sh stop",
     "build:deploy": "npm run build && node scripts/write-config.mjs",
-    "e2e": "node e2e/flow.mjs test-results"
+    "e2e": "node e2e/flow.mjs test-results",
+    "e2e:local": "npm run build && node scripts/write-local-config.mjs && node e2e/flow.mjs test-results"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

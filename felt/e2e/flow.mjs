@@ -3,13 +3,15 @@
 // Usage: npm run stack:start && npm run build && (write dist/config.js) && npx vite preview --port 4173
 //        node e2e/flow.mjs [screenshotDir]
 import { chromium, devices } from 'playwright';
+import fs from 'node:fs';
 
 const BASE = process.env.FELT_E2E_URL ?? 'http://localhost:4173/';
 const OUT = process.argv[2] ?? 'test-results';
 const id = Math.random().toString(36).slice(2, 7);
 const errors = [];
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium' });
+const chromiumPath = process.env.CHROMIUM_PATH ?? (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
+const browser = await chromium.launch(chromiumPath ? { executablePath: chromiumPath } : {});
 const phone = { ...devices['iPhone 13'], defaultBrowserType: undefined };
 delete phone.defaultBrowserType;
 

@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 const URL = process.env.FELT_TEST_URL ?? 'http://127.0.0.1:54321';
 const ANON = jwt.sign({ role: 'anon', iss: 'supabase' }, 'super-secret-jwt-token-with-at-least-32-characters-long', { expiresIn: '1h' });
 const up = await fetch(`${URL}/auth/v1/health`).then((r) => r.ok).catch(() => false);
+// In CI the stack must be running: fail loudly instead of quietly skipping.
+if (!up && process.env.FELT_REQUIRE_STACK) throw new Error(`Local Supabase stack not reachable at ${URL}`);
 const suite = up ? describe : describe.skip;
 
 async function newUser(name: string): Promise<SupabaseClient> {
