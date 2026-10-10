@@ -98,8 +98,11 @@ These steps need your own accounts, so you have to do them yourself.
 
 ### 3. Publish the website
 
-1. In GitHub, open **thebog-123/tutor → Settings → Secrets and variables →
-   Actions → Variables** and add two *repository variables*:
+1. The project URL and publishable key are already in
+   [`felt/public/config.js`](public/config.js). To use a different Supabase
+   project, edit that file, or in GitHub open **thebog-123/tutor → Settings →
+   Secrets and variables → Actions → Variables** and add two *repository
+   variables* (these override the file):
    - `FELT_SUPABASE_URL` = the Project URL
    - `FELT_SUPABASE_ANON_KEY` = the anon / publishable key
 2. **Settings → Pages → Build and deployment → Source:** choose **GitHub Actions**.

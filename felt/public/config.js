@@ -1,8 +1,10 @@
-// Felt connection settings. Fill these in with your Supabase project's values
-// (Project Settings → API), or let the GitHub Pages workflow write this file
-// from the repository variables FELT_SUPABASE_URL and FELT_SUPABASE_ANON_KEY.
-// Both values are public by design: data is protected by row-level security.
+// Felt connection settings: the Supabase project URL and its publishable
+// (anon) key. Both are public by design. The data is protected by the
+// database's row-level security, not by keeping these secret. Never put the
+// secret / service_role key here.
+// The deploy workflow overwrites this file if the repository variables
+// FELT_SUPABASE_URL and FELT_SUPABASE_ANON_KEY are set.
 window.FELT_CONFIG = {
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://ayakqjlrbamvkvilqjmt.supabase.co',
+  supabaseAnonKey: 'sb_publishable_bU7xPXLNgAtoxEoSvqfmSQ_e_AeoNY3',
 };

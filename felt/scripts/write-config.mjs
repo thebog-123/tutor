@@ -6,7 +6,8 @@ import { writeFileSync } from 'node:fs';
 const url = (process.env.FELT_SUPABASE_URL ?? '').trim();
 const key = (process.env.FELT_SUPABASE_ANON_KEY ?? '').trim();
 if (!url || !key) {
-  console.warn('FELT_SUPABASE_URL / FELT_SUPABASE_ANON_KEY not set: the site will show a "not connected" message.');
+  console.log('FELT_SUPABASE_URL / FELT_SUPABASE_ANON_KEY not set: keeping the committed public/config.js.');
+  process.exit(0);
 }
 if (url && !/^https?:\/\/\S+$/.test(url)) {
   throw new Error('FELT_SUPABASE_URL does not look like a URL.');
