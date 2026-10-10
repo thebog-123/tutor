@@ -189,3 +189,23 @@ suite('guests', () => {
     expect((await ok(ann.from('players').select('is_guest').eq('id', guest).single())).is_guest).toBe(false);
   });
 });
+
+suite('backup reminder', () => {
+  it('records when an admin last downloaded a backup, and keeps guests as guests on restore', async () => {
+    const [ann, bea] = await Promise.all([newUser('bk-a'), newUser('bk-b')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Backups', p_player_names: ['Ann'], p_claim_index: 1 }));
+    await ok(ann.rpc('add_player', { p_group: groupId, p_name: 'Gus', p_guest: true }));
+    const { invite_code, last_backup_at } = await ok(ann.from('groups').select('invite_code,last_backup_at').eq('id', groupId).single());
+    expect(last_backup_at).toBeNull();
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    await fails(bea.rpc('export_backup', { p_group: groupId }), 'FT403');
+    const backup = await ok(ann.rpc('export_backup', { p_group: groupId }));
+    const annId = (await ann.auth.getUser()).data.user!.id;
+    const g = await ok(bea.from('groups').select('last_backup_at,last_backup_by').eq('id', groupId).single());
+    expect(g.last_backup_by).toBe(annId);
+    expect(Date.now() - new Date(g.last_backup_at).getTime()).toBeLessThan(60_000);
+    await ok(ann.rpc('restore_backup', { p_group: groupId, p_backup: backup }));
+    const gus = await ok(ann.from('players').select('is_guest').eq('group_id', groupId).eq('name', 'Gus').single());
+    expect(gus.is_guest).toBe(true);
+  });
+});

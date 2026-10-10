@@ -8,6 +8,7 @@ import { validateBackup, type BackupSummary } from '../lib/backup';
 import { entryProfit, totalIn } from '../lib/stats';
 import { Banner, Confirm, ErrorBanner, SectionTitle, Sheet, Skeleton, Avatar, download, formatDate, formatDateTime, todayISO, useToast } from '../ui';
 import { AccountCard } from './Groups';
+import { downloadBackup } from '../lib/backupDownload';
 import { InviteCard, inviteLink } from './Invite';
 import { AddMeButton } from './Overview';
 import type { AuditRow, Member, Player } from '../types';
@@ -328,8 +329,9 @@ function AdminTools() {
   async function exportJSON() {
     setBusy(true);
     try {
-      const backup = await rpc('export_backup', { p_group: g.group.id });
-      download(`${slug}-backup-${todayISO()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+      await downloadBackup(g.group.id, g.group.name);
+      await g.reload();
+      toast.show('Backup downloaded. Keep the file somewhere safe.');
     } catch (e) {
       toast.show(errorMessage(e), 'error');
     } finally {
@@ -344,6 +346,12 @@ function AdminTools() {
         <div className="stack-sm">
           <b>Export</b>
           <p className="small muted">A CSV of every finalised result for spreadsheets, or a full JSON backup of players, games and payments.</p>
+          <p className="small">
+            {g.group.last_backup_at
+              ? `Last backup: ${formatDateTime(g.group.last_backup_at)} by ${g.personName(g.group.last_backup_by)}.`
+              : 'No backup downloaded yet.'}{' '}
+            <span className="muted">The free database plan doesn't keep backups for you, so download one every month or so.</span>
+          </p>
           <div className="btn-row">
             <button className="btn" onClick={exportCSV}>
               Results CSV

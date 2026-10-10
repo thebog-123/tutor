@@ -129,6 +129,10 @@ await shot(alice, '12b-leaderboard-sorted');
 await alice.getByRole('link', { name: 'Home' }).last().click();
 await alice.getByText('All-time poker result').waitFor();
 await shot(alice, '13-overview');
+// Backup reminder: one tap downloads the file and the reminder goes away.
+const [file] = await Promise.all([alice.waitForEvent('download'), alice.getByRole('button', { name: 'Download backup' }).click()]);
+if (!/backup-.*\.json$/.test(file.suggestedFilename())) errors.push(`unexpected backup file ${file.suggestedFilename()}`);
+await alice.getByText('Time for a backup').waitFor({ state: 'detached' });
 
 // --- Live game: Alice starts it, Bob joins and rebuys from his phone, then leaves early
 await alice.getByRole('link', { name: '● Start live game' }).click();
@@ -167,9 +171,9 @@ await alice.getByRole('button', { name: 'End game' }).click();
 await alice.getByText('Ending will finalise it straight away').waitFor();
 await alice.getByRole('button', { name: 'Cancel' }).click();
 // A guest turns up for one game.
-await alice.getByRole('button', { name: '+ Add player or guest' }).click();
-await alice.getByLabel('Or add a guest').fill('Gus');
-await alice.getByRole('button', { name: 'Add Gus as a guest' }).click();
+await alice.getByRole('button', { name: '+ Add guest' }).click();
+await alice.getByLabel("Guest's name").fill('Gus');
+await alice.getByRole('button', { name: 'Add Gus' }).click();
 await alice.locator('.entry-card').filter({ hasText: 'Gus' }).getByRole('button', { name: 'Cash out' }).click();
 await alice.getByLabel("Chips they're leaving with").fill('20');
 await alice.getByRole('button', { name: 'Save' }).click();

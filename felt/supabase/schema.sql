@@ -42,6 +42,8 @@ create table if not exists public.groups (
   created_at  timestamptz not null default now()
 );
 alter table public.groups enable row level security;
+alter table public.groups add column if not exists last_backup_at timestamptz;
+alter table public.groups add column if not exists last_backup_by uuid references auth.users (id) on delete set null;
 
 create table if not exists public.group_members (
   group_id  uuid not null references public.groups (id) on delete cascade,
@@ -1058,14 +1060,13 @@ end $$;
 -- Backup and restore
 -- ---------------------------------------------------------------------------
 
-create or replace function public.export_backup(p_group uuid) returns jsonb
+create or replace function public._backup_json(p_group uuid) returns jsonb
 language plpgsql stable security definer set search_path = public, pg_temp as $$
 begin
-  perform _require_admin(p_group);
   return jsonb_build_object(
     'format', 'felt-backup', 'version', 1, 'exported_at', now(),
     'group', (select jsonb_build_object('id', id, 'name', name, 'is_sample', is_sample) from groups where id = p_group),
-    'players', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'active', active,
+    'players', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'active', active, 'is_guest', is_guest,
                           'claimed_by', claimed_by) order by created_at, name) from players where group_id = p_group), '[]'::jsonb),
     -- Live games are still being played, so they're left out of backups.
     'games', coalesce((select jsonb_agg(_game_json(id) order by played_on, created_at) from games where group_id = p_group and status <> 'live'), '[]'::jsonb),
@@ -1073,6 +1074,15 @@ begin
                   'id', id, 'from_player', from_player, 'to_player', to_player, 'amount_pence', amount_pence,
                   'note', note, 'status', status, 'recorded_at', recorded_at, 'confirmed_at', confirmed_at,
                   'close_reason', close_reason) order by recorded_at) from payments where group_id = p_group), '[]'::jsonb));
+end $$;
+
+-- An admin downloads a backup. Records when, so the app can remind admins.
+create or replace function public.export_backup(p_group uuid) returns jsonb
+language plpgsql volatile security definer set search_path = public, pg_temp as $$
+begin
+  perform _require_admin(p_group);
+  update groups set last_backup_at = now(), last_backup_by = auth.uid() where id = p_group;
+  return _backup_json(p_group);
 end $$;
 
 -- Replace this group's players, games and payments with the contents of a
@@ -1100,7 +1110,7 @@ begin
   perform _lock_group(p_group);
 
   perform _audit(p_group, 'backup.restore_started', 'group', p_group,
-    jsonb_build_object('previous', export_backup(p_group)));
+    jsonb_build_object('previous', _backup_json(p_group)));
 
   delete from payments where group_id = p_group;
   delete from games where group_id = p_group;
@@ -1113,9 +1123,9 @@ begin
       if not exists (select 1 from group_members where group_id = p_group and user_id = v_claim) then v_claim := null; end if;
     end if;
     begin
-      insert into players (group_id, name, active, claimed_by)
+      insert into players (group_id, name, active, is_guest, claimed_by)
       values (p_group, _clean_text(v_item ->> 'name', 'Player name', 40, true),
-              coalesce((v_item ->> 'active')::boolean, true), v_claim)
+              coalesce((v_item ->> 'active')::boolean, true), coalesce((v_item ->> 'is_guest')::boolean, false) and v_claim is null, v_claim)
       returning id into v_new;
     exception when unique_violation then
       perform _fail('FT422', 'The backup has two players called "' || (v_item ->> 'name') || '", or a player is claimed twice.');

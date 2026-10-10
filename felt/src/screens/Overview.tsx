@@ -6,6 +6,7 @@ import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
 import { Banner, Empty, Money, SectionTitle, formatDate, useToast } from '../ui';
 import { addMeAsPlayer } from '../lib/me';
+import { backupDue, downloadBackup, snoozeBackup } from '../lib/backupDownload';
 import { useSession } from '../session';
 import { errorMessage } from '../errors';
 import { useState } from 'react';
@@ -134,6 +135,8 @@ export function Overview() {
         </div>
       )}
 
+      {g.me.isAdmin && !g.group.is_sample && backupDue(g.group, g.games) && <BackupReminder />}
+
       {g.members.length < 2 && (
         <div className="card felt stack-sm">
           <b>You're the only one here so far</b>
@@ -258,5 +261,56 @@ function MoneyOnFelt({ pence }: { pence: number }) {
     <span className="num" style={{ color: pence > 0 ? 'var(--lime)' : pence < 0 ? '#ffc2bb' : undefined }}>
       {formatPence(pence, { sign: true })}
     </span>
+  );
+}
+
+/** Nudge for admins: the free database plan keeps no backups, so download one. */
+export function BackupReminder() {
+  const g = useGroup();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  const last = g.group.last_backup_at;
+  const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000) : null;
+  return (
+    <Banner tone="warn">
+      <div className="stack-sm">
+        <span>
+          <b>Time for a backup.</b>{' '}
+          {days === null ? "This group hasn't been backed up yet." : `The last backup was ${days} days ago.`} The free database plan doesn't keep backups,
+          so save a copy somewhere safe (iCloud, Google Drive, or email it to yourself).
+        </span>
+        <div className="row wrap">
+          <button
+            className="btn small primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await downloadBackup(g.group.id, g.group.name);
+                await g.reload();
+                toast.show('Backup downloaded. Keep the file somewhere safe.');
+              } catch (e) {
+                toast.show(errorMessage(e), 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? <span className="spinner" /> : 'Download backup'}
+          </button>
+          <button
+            className="btn small ghost"
+            onClick={() => {
+              snoozeBackup(g.group.id);
+              setHidden(true);
+            }}
+          >
+            Remind me in a week
+          </button>
+        </div>
+      </div>
+    </Banner>
   );
 }

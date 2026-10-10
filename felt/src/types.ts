@@ -8,6 +8,8 @@ export interface Group {
   invite_code: string;
   is_sample: boolean;
   created_by: string | null;
+  last_backup_at: string | null;
+  last_backup_by: string | null;
   created_at: string;
 }
 

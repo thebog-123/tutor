@@ -7,6 +7,8 @@ import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
 import { Avatar, Banner, Empty, Money, SectionTitle, formatDate, formatDateTime } from '../ui';
 import { AccountCard } from './Groups';
+import { backupDue } from '../lib/backupDownload';
+import { BackupReminder } from './Overview';
 
 /** Things in this group waiting on the signed-in person. Used for the tab badge too. */
 export function pendingActions(g: GroupData) {
@@ -15,7 +17,15 @@ export function pendingActions(g: GroupData) {
   const draftsToFinalise = g.me.isAdmin ? g.games.filter((x) => x.status === 'draft') : [];
   const liveGames = g.games.filter((x) => x.status === 'live');
   const claim = !g.me.player;
-  return { myPayments, draftsToFinalise, liveGames, claim, count: myPayments.length + draftsToFinalise.length + (claim ? 1 : 0) };
+  const backup = g.me.isAdmin && !g.group.is_sample && backupDue(g.group, g.games);
+  return {
+    myPayments,
+    draftsToFinalise,
+    liveGames,
+    claim,
+    backup,
+    count: myPayments.length + draftsToFinalise.length + (claim ? 1 : 0) + (backup ? 1 : 0),
+  };
 }
 
 const icons = {
@@ -272,6 +282,7 @@ function PendingActions() {
           </div>
         </Banner>
       )}
+      {p.backup && <BackupReminder />}
       {p.liveGames.length > 0 && (
         <div className="stack-sm">
           <SectionTitle title="Live now" />
