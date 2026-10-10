@@ -1,0 +1,44 @@
+# Keeps Felt's free Supabase project awake: Supabase pauses free projects after
+# 7 days with no activity. Once a day this makes one tiny call (public.ping,
+# which reads no data). If the call fails (e.g. the project is already paused),
+# the run fails and GitHub emails the repository owner.
+#
+# GitHub only runs scheduled workflows from the repository's DEFAULT branch,
+# and turns them off after 60 days without any commits (it emails first; click
+# "Enable workflow" in the Actions tab to turn it back on).
+name: Felt keep-alive
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # every day at 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: felt/public/config.js
+          sparse-checkout-cone-mode: false
+      - name: Ping the database
+        env:
+          VAR_URL: ${{ vars.FELT_SUPABASE_URL }}
+          VAR_KEY: ${{ vars.FELT_SUPABASE_ANON_KEY }}
+        run: |
+          # Same connection details the website uses (repository variables override the file).
+          URL="${VAR_URL:-$(sed -n "s/.*supabaseUrl: *'\([^']*\)'.*/\1/p" felt/public/config.js)}"
+          KEY="${VAR_KEY:-$(sed -n "s/.*supabaseAnonKey: *'\([^']*\)'.*/\1/p" felt/public/config.js)}"
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "No Supabase URL/key configured"; exit 1; fi
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 30 -X POST "${URL%/}/rest/v1/rpc/ping" \
+                 -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'; then
+              echo; echo "Felt database is awake."; exit 0
+            fi
+            echo "Attempt $attempt failed; retrying in 30s"; sleep 30
+          done
+          echo "::error::Couldn't reach the Felt database. If it's paused, restore it at https://supabase.com/dashboard"
+          exit 1

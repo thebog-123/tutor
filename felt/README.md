@@ -195,6 +195,19 @@ When a new version of Felt changes `supabase/schema.sql`, open Supabase → **SQ
 Editor** → **New query**, paste the whole file and **Run**. It's written to be run
 again safely: existing groups, games and payments are kept.
 
+## Keeping the database awake
+
+`.github/workflows/felt-keepalive.yml` makes one tiny request a day
+(`public.ping`, which reads no data), so the free project never sits idle for the
+7 days that trigger a pause. Two GitHub rules apply:
+
+- Scheduled workflows only run from the repository's **default branch**.
+- GitHub switches them off after **60 days with no commits** to the repository,
+  and emails you first. Re-enable it under **Actions → Felt keep-alive**.
+
+If a run fails (for example because the project was already paused), GitHub
+emails the repository owner.
+
 ## Restoring a paused project, backups
 
 - **Paused project:** at supabase.com/dashboard → your project → **Restore**.

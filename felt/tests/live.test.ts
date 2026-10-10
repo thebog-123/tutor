@@ -209,3 +209,12 @@ suite('backup reminder', () => {
     expect(gus.is_guest).toBe(true);
   });
 });
+
+suite('keep-alive', () => {
+  it('lets anyone call ping, which reveals nothing, while every other function stays closed to signed-out callers', async () => {
+    const anon = createClient(URL, ANON, { auth: { persistSession: false } });
+    expect(await ok(anon.rpc('ping'))).toBe('ok');
+    const { error } = await anon.rpc('get_balances', { p_group: randomUUID() });
+    expect(error).not.toBeNull();
+  });
+});

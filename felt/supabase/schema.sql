@@ -1344,5 +1344,12 @@ begin
   end if;
 end $$;
 
+-- Keep-alive: a do-nothing call a daily GitHub job makes so the free project
+-- never counts as inactive (Supabase pauses free projects after 7 idle days).
+-- It reads no data, so it's safe for anyone to call.
+create or replace function public.ping() returns text language sql stable as $$ select 'ok'::text $$;
+revoke execute on function public.ping() from public;
+grant execute on function public.ping() to anon, authenticated;
+
 -- Tell the Data API (PostgREST) to pick up new and changed functions straight away.
 notify pgrst, 'reload schema';
