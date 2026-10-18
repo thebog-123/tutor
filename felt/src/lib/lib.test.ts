@@ -266,3 +266,50 @@ describe('rivalries and performance', () => {
     expect(profitSeries(games, 'nobody')).toEqual([]);
   });
 });
+
+import { settlementByGame } from './settlement';
+
+describe('settlementByGame', () => {
+  const game = (id: string, t: string, rows: [string, number][]) => ({
+    id,
+    status: 'final',
+    finalised_at: t,
+    updated_at: t,
+    entries: rows.map(([player_id, profit]) => ({ player_id, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: 1000 + profit })),
+  });
+  const pay = (from: string, to: string, amount: number, t: string, status = 'confirmed') => ({
+    from_player: from, to_player: to, amount_pence: amount, status, confirmed_at: status === 'confirmed' ? t : null,
+  });
+  const g1 = game('g1', '2026-10-01', [['a', 500], ['b', -500]]);
+  const g2 = game('g2', '2026-10-08', [['a', -300], ['b', 300]]);
+
+  it('is outstanding until the money moves, and pending payments do not count', () => {
+    const s = settlementByGame([g1], [pay('b', 'a', 500, '2026-10-02', 'pending')]);
+    expect(s.get('g1')).toEqual({ settled: false, outstanding: ['a', 'b'] });
+  });
+  it('is settled when the confirmed payment squares everyone up', () => {
+    expect(settlementByGame([g1], [pay('b', 'a', 500, '2026-10-02')]).get('g1')!.settled).toBe(true);
+  });
+  it('stays outstanding after a part payment', () => {
+    expect(settlementByGame([g1], [pay('b', 'a', 200, '2026-10-02')]).get('g1')!.settled).toBe(false);
+  });
+  it('counts winnings in a later game against an older debt', () => {
+    // b owes 5 from g1, wins 3 in g2 (now owes 2): g2 is square for b, g1 is not.
+    const s = settlementByGame([g1, g2], []);
+    expect(s.get('g1')).toEqual({ settled: false, outstanding: ['a', 'b'] });
+    expect(s.get('g2')).toEqual({ settled: true, outstanding: [] });
+    // b pays the remaining 2: everything settles.
+    const done = settlementByGame([g1, g2], [pay('b', 'a', 200, '2026-10-09')]);
+    expect([done.get('g1')!.settled, done.get('g2')!.settled]).toEqual([true, true]);
+  });
+  it('closes older games and opens the new one when a balance flips', () => {
+    const g3 = game('g3', '2026-10-15', [['a', -800], ['b', 800]]); // a: +5 -> -3, b: -5 -> +3
+    const s = settlementByGame([g1, g3], []);
+    expect(s.get('g1')!.settled).toBe(true);
+    expect(s.get('g3')).toEqual({ settled: false, outstanding: ['a', 'b'] });
+  });
+  it('treats a break-even night as settled for that player', () => {
+    const g = game('g', '2026-10-01', [['a', 0], ['b', 0]]);
+    expect(settlementByGame([g], []).get('g')!.settled).toBe(true);
+  });
+});

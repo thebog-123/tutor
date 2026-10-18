@@ -116,6 +116,17 @@ await alice.getByRole('button', { name: 'Confirm', exact: true }).click();
 await alice.getByText('Fully confirmed', { exact: false }).waitFor();
 await shot(alice, '11-payment-confirmed');
 
+// Games list shows money still outstanding; the game can be renamed after it's finished.
+await alice.getByRole('link', { name: 'Games' }).last().click();
+await alice.locator('.list-item').filter({ hasText: 'Poker night' }).getByText('Payments outstanding').waitFor();
+await alice.locator('.list-item').filter({ hasText: 'Poker night' }).click();
+await alice.getByText('Still to pay:', { exact: false }).waitFor();
+await alice.getByRole('button', { name: 'Rename game' }).click();
+await alice.getByLabel('Game name').fill('Opening night');
+await alice.getByRole('button', { name: 'Save name' }).click();
+await alice.getByRole('heading', { name: 'Opening night' }).waitFor();
+await shot(alice, '11b-game-outstanding-renamed');
+
 // --- Leaderboard is unchanged by payments
 await alice.getByRole('link', { name: 'Leaderboard' }).last().click();
 await alice.getByText('Paying off a debt never changes the rankings', { exact: false }).waitFor();

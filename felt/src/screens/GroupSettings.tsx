@@ -102,10 +102,11 @@ function MembersSection() {
                   <b className="ellipsis">{name}</b>
                   {me && <span className="badge lime">You</span>}
                   {m.role === 'admin' && <span className="badge green">Admin</span>}
+                  {m.user_id === g.group.created_by && <span className="badge lime">Creator</span>}
                 </span>
                 <span className="small muted">{player ? `Plays as ${player.name}` : 'Has not claimed a player'}</span>
               </span>
-              {g.me.isAdmin && !me && (
+              {g.me.isAdmin && !me && m.user_id !== g.group.created_by && (
                 <span className="row" style={{ gap: 4 }}>
                   <button className="btn small" onClick={() => setAction({ kind: m.role === 'admin' ? 'demote' : 'promote', member: m })}>
                     {m.role === 'admin' ? 'Remove admin' : 'Make admin'}
@@ -245,6 +246,8 @@ function PlayersSection() {
 
 function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void }) {
   const g = useGroup();
+  // A claimed player's name belongs to its owner (the server enforces this too).
+  const lockedName = !!player?.claimed_by && player.claimed_by !== g.me.userId;
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
   const [active, setActive] = useState(player?.active ?? true);
@@ -273,7 +276,18 @@ function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void
       >
         <div className="field">
           <label htmlFor="player-name">Name</label>
-          <input id="player-name" className="input" maxLength={40} autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            id="player-name"
+            className="input"
+            maxLength={40}
+            autoFocus={!lockedName}
+            disabled={lockedName}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          {lockedName && (
+            <span className="hint">Only {g.personName(player!.claimed_by)} can change their own name. You can still archive this player.</span>
+          )}
         </div>
         {!player && (
           <label className="row" style={{ minHeight: 44 }}>
@@ -573,7 +587,7 @@ function LeaveSection() {
         <button className="btn danger" onClick={() => setOpen(true)}>
           Leave group
         </button>
-        {g.me.isAdmin && !g.group.is_sample && (
+        {g.me.isAdmin && !g.group.is_sample && (g.group.created_by === g.me.userId || !g.members.some((m) => m.user_id === g.group.created_by)) && (
           <button className="btn danger" onClick={() => setDeleting(true)}>
             Delete group
           </button>

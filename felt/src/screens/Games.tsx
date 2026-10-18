@@ -4,9 +4,10 @@ import { useGroup } from '../data';
 import { navigate } from '../router';
 import { entryProfit, gameTotals, totalIn } from '../lib/stats';
 import { formatPence } from '../lib/money';
-import { Banner, Confirm, Empty, ErrorBanner, Money, SectionTitle, Skeleton, formatDate, formatDateTime, useToast } from '../ui';
+import { Banner, Confirm, Empty, ErrorBanner, Money, SectionTitle, Sheet, Skeleton, formatDate, formatDateTime, useToast } from '../ui';
 import type { AuditRow, Game } from '../types';
 import { LiveGame } from './LiveGame';
+import { settlementByGame, type GameSettlement } from '../lib/settlement';
 
 export function StatusBadge({ status }: { status: Game['status'] }) {
   if (status === 'final') return <span className="badge green">Final</span>;
@@ -23,6 +24,7 @@ export function GamesList() {
     .filter((x) => showVoid || x.status !== 'void')
     .sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live'));
   const voidCount = g.games.length - g.games.filter((x) => x.status !== 'void').length;
+  const settlement = useMemo(() => settlementByGame(g.games, g.payments), [g.games, g.payments]);
   return (
     <div className="stack-lg">
       <div className="row-between">
@@ -52,6 +54,7 @@ export function GamesList() {
                     <span className="row" style={{ gap: 8 }}>
                       <b className="ellipsis">{game.name}</b>
                       {game.status !== 'final' && <StatusBadge status={game.status} />}
+                      {game.status === 'final' && <SettledBadge s={settlement.get(game.id)} />}
                     </span>
                     <span className="small muted">
                       {formatDate(game.played_on)} · {game.entries.length} players · pot {formatPence(pot)}
@@ -80,6 +83,8 @@ export function GameDetail({ gameId }: { gameId: string }) {
   const base = `#/g/${g.group.id}`;
   const game = g.games.find((x) => x.id === gameId);
   const [dialog, setDialog] = useState<'finalise' | 'delete' | 'void' | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const settlement = useMemo(() => settlementByGame(g.games, g.payments), [g.games, g.payments]);
   const [history, setHistory] = useState<AuditRow[] | null>(null);
   const [historyError, setHistoryError] = useState<unknown>(null);
 
@@ -108,6 +113,7 @@ export function GameDetail({ gameId }: { gameId: string }) {
   const totals = gameTotals(game.entries);
   const balanced = totals.difference === 0;
   const canEditDraft = game.status === 'draft' && (g.me.isAdmin || game.created_by === g.me.userId);
+  const canRename = game.status !== 'void' && (g.me.isAdmin || game.created_by === g.me.userId);
 
   return (
     <div className="stack-lg">
@@ -116,14 +122,28 @@ export function GameDetail({ gameId }: { gameId: string }) {
           ‹ Games
         </a>
         <div className="row-between" style={{ alignItems: 'flex-start' }}>
-          <h1>{game.name}</h1>
-          <StatusBadge status={game.status} />
+          <div className="row" style={{ gap: 4, alignItems: 'flex-start', minWidth: 0 }}>
+            <h1 style={{ overflowWrap: 'anywhere' }}>{game.name}</h1>
+            {canRename && (
+              <button className="icon-btn" aria-label="Rename game" onClick={() => setRenaming(true)} style={{ marginTop: -4 }}>
+                ✎
+              </button>
+            )}
+          </div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <StatusBadge status={game.status} />
+            {game.status === 'final' && <SettledBadge s={settlement.get(game.id)} />}
+          </div>
         </div>
         <p className="muted small">
           {formatDate(game.played_on, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {game.entries.length} players
         </p>
         {game.notes && <p className="small">{game.notes}</p>}
       </div>
+
+      {game.status === 'final' && (
+        <OutstandingBanner outstanding={settlement.get(game.id)?.outstanding ?? []} />
+      )}
 
       {game.status === 'void' && (
         <Banner tone="error">
@@ -228,6 +248,8 @@ export function GameDetail({ gameId }: { gameId: string }) {
         )}
       </div>
 
+      {renaming && <RenameSheet gameId={game.id} current={game.name} onClose={() => setRenaming(false)} />}
+
       {dialog === 'finalise' && (
         <Confirm
           title="Finalise this game?"
@@ -294,6 +316,73 @@ export function describeGameAction(action: string) {
       'game.live_started': 'Live game started',
       'game.live_ended': 'Live game ended',
       'game.live_player_removed': 'Player removed from live game',
+      'game.renamed': 'Renamed',
     }[action] ?? action
+  );
+}
+
+function SettledBadge({ s }: { s?: GameSettlement }) {
+  if (!s) return null;
+  return s.settled ? <span className="badge green">✓ Settled</span> : <span className="badge warn">Payments outstanding</span>;
+}
+
+function OutstandingBanner({ outstanding }: { outstanding: string[] }) {
+  const g = useGroup();
+  if (outstanding.length === 0) return <Banner tone="ok">✓ Everyone has settled up for this game.</Banner>;
+  const balance = (id: string) => g.balances.find((b) => b.player_id === id)?.balance_pence ?? 0;
+  const owes = outstanding.filter((id) => balance(id) < 0);
+  const owed = outstanding.filter((id) => balance(id) > 0);
+  const names = (ids: string[]) => ids.map((id) => g.playerName(id)).join(', ');
+  return (
+    <Banner tone="warn">
+      <div className="stack-sm">
+        <span>
+          <b>Payments outstanding.</b> {owes.length > 0 && <>Still to pay: {names(owes)}. </>}
+          {owed.length > 0 && <>Still to be paid: {names(owed)}.</>}
+        </span>
+        <a className="btn small" style={{ alignSelf: 'flex-start' }} href={`#/g/${g.group.id}/payments`}>
+          Settle up
+        </a>
+      </div>
+    </Banner>
+  );
+}
+
+function RenameSheet({ gameId, current, onClose }: { gameId: string; current: string; onClose: () => void }) {
+  const g = useGroup();
+  const toast = useToast();
+  const [name, setName] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  return (
+    <Sheet title="Rename game" onClose={busy ? () => undefined : onClose}>
+      <form
+        className="stack"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (busy || !name.trim()) return;
+          setBusy(true);
+          setError(null);
+          try {
+            await rpc('rename_game', { p_game: gameId, p_name: name });
+            await g.reload();
+            toast.show('Game renamed');
+            onClose();
+          } catch (err) {
+            setError(err);
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="field">
+          <label htmlFor="game-rename">Game name</label>
+          <input id="game-rename" className="input" maxLength={80} autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <ErrorBanner error={error} />
+        <button className="btn primary block" disabled={busy || !name.trim() || name.trim() === current}>
+          {busy ? <span className="spinner" /> : 'Save name'}
+        </button>
+      </form>
+    </Sheet>
   );
 }

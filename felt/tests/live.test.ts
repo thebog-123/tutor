@@ -220,3 +220,53 @@ suite('keep-alive', () => {
     expect(error).not.toBeNull();
   });
 });
+
+suite('names, creators and renaming games', () => {
+  it('lets only the account owner rename a claimed player, and keeps the creator an admin', async () => {
+    const [ann, bea, cal] = await Promise.all([newUser('own-a'), newUser('own-b'), newUser('own-c')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Owners', p_player_names: ['Ann', 'Visitor'], p_claim_index: 1 }));
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    await ok(cal.rpc('join_group', { p_code: invite_code }));
+    const beaPlayer = await ok(bea.rpc('add_me_as_player', { p_group: groupId, p_name: 'Bea' }));
+    const annId = (await ann.auth.getUser()).data.user!.id;
+    const beaId = (await bea.auth.getUser()).data.user!.id;
+
+    // Names: the creator/admin can't rename Bea's player, Bea can.
+    await fails(ann.rpc('update_player', { p_player: beaPlayer, p_name: 'Bee', p_active: null }), 'FT403', /Only own-b can change their own name/);
+    await ok(ann.rpc('update_player', { p_player: beaPlayer, p_name: 'Bea', p_active: false })); // archiving is still fine
+    await ok(bea.rpc('update_player', { p_player: beaPlayer, p_name: 'Bea B', p_active: null }));
+    const visitor = (await ok(ann.from('players').select('id').eq('group_id', groupId).eq('name', 'Visitor').single())).id;
+    await ok(ann.rpc('update_player', { p_player: visitor, p_name: 'Visiting Vic', p_active: null })); // unclaimed: admin may rename
+
+    // Creator: another admin can't demote or remove them, or delete the group.
+    await ok(ann.rpc('set_member_role', { p_group: groupId, p_user: beaId, p_role: 'admin' }));
+    await fails(bea.rpc('set_member_role', { p_group: groupId, p_user: annId, p_role: 'member' }), 'FT403', /always stays an admin/);
+    await fails(bea.rpc('remove_member', { p_group: groupId, p_user: annId }), 'FT403', /can't be removed/);
+    await fails(bea.rpc('delete_group', { p_group: groupId, p_confirm: 'DELETE' }), 'FT403', /created the group/);
+    // The creator can still manage others.
+    await ok(ann.rpc('set_member_role', { p_group: groupId, p_user: beaId, p_role: 'member' }));
+  });
+
+  it('renames a finished game (recorder or admin only) and logs it', async () => {
+    const [ann, bea, cal] = await Promise.all([newUser('rn-a'), newUser('rn-b'), newUser('rn-c')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Renames', p_player_names: ['Ann', 'Bob'], p_claim_index: 1 }));
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    await ok(cal.rpc('join_group', { p_code: invite_code }));
+    const players = await ok(ann.from('players').select('id').eq('group_id', groupId));
+    const d = await ok(bea.rpc('save_game_draft', {
+      p_group: groupId, p_game: null, p_expected_version: null, p_name: 'Poker night', p_played_on: '2026-10-16', p_notes: '',
+      p_entries: players.map((p: { id: string }, i: number) => ({ player_id: p.id, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: i ? 0 : 2000 })),
+    }));
+    await ok(ann.rpc('finalise_game', { p_game: d.id, p_expected_version: d.version }));
+    await ok(bea.rpc('rename_game', { p_game: d.id, p_name: "Bea's birthday" })); // recorded it
+    await fails(cal.rpc('rename_game', { p_game: d.id, p_name: 'Mine' }), 'FT403');
+    await ok(ann.rpc('rename_game', { p_game: d.id, p_name: 'Birthday game' })); // admin
+    await fails(ann.rpc('rename_game', { p_game: d.id, p_name: '  ' }), 'FT422');
+    const g = await ok(ann.from('games').select('name,status').eq('id', d.id).single());
+    expect(g).toEqual({ name: 'Birthday game', status: 'final' });
+    const log = await ok(ann.from('audit_log').select('detail').eq('entity_id', d.id).eq('action', 'game.renamed').order('created_at'));
+    expect(log.map((l: { detail: { to: string } }) => l.detail.to)).toEqual(["Bea's birthday", 'Birthday game']);
+  });
+});
