@@ -1,0 +1,38 @@
+# Chess Learn checks: type-check, validate every lesson and puzzle, and build.
+name: Chess Learn checks
+
+on:
+  push:
+    paths: ['chess/**', '.github/workflows/chess-ci.yml']
+  pull_request:
+    paths: ['chess/**', '.github/workflows/chess-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chess-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: chess
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chess/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Lessons and puzzles are legal
+        run: npm test
+      - name: Build
+        run: npm run build
