@@ -3,9 +3,10 @@ import { rpc } from '../supabase';
 import { useGroup } from '../data';
 import { simplifyDebts, type Transfer } from '../lib/settle';
 import { formatPence } from '../lib/money';
-import { Avatar, Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDateTime, useToast } from '../ui';
+import { Avatar, Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDate, formatDateTime, useToast } from '../ui';
 import type { Payment } from '../types';
 import { canReject, confirmableSides, needsMe, type Viewer } from '../lib/payments';
+import { settlementDetails, type Allocation, type GameSettlement } from '../lib/settlement';
 
 export function Payments() {
   const g = useGroup();
@@ -13,6 +14,22 @@ export function Payments() {
   const [recording, setRecording] = useState<{ from?: string; to?: string; amount?: number } | null>(null);
   const [action, setAction] = useState<{ kind: 'confirm' | 'reject' | 'void' | 'withdraw'; payment: Payment } | null>(null);
   const [historyFilter, setHistoryFilter] = useState<'all' | 'mine'>('all');
+  const [view, setView] = useState<'everyone' | 'games'>(() => {
+    try {
+      return sessionStorage.getItem('felt.paymentsView') === 'games' ? 'games' : 'everyone';
+    } catch {
+      return 'everyone';
+    }
+  });
+  const chooseView = (v: 'everyone' | 'games') => {
+    setView(v);
+    try {
+      sessionStorage.setItem('felt.paymentsView', v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const details = useMemo(() => settlementDetails(g.games, g.payments), [g.games, g.payments]);
 
   const { transfers, transferError } = useMemo(() => {
     try {
@@ -43,6 +60,19 @@ export function Payments() {
         </p>
       </div>
 
+      <div className="segmented" role="tablist" aria-label="View">
+        <button role="tab" aria-selected={view === 'everyone'} className={view === 'everyone' ? 'on' : ''} onClick={() => chooseView('everyone')}>
+          Everyone
+        </button>
+        <button role="tab" aria-selected={view === 'games'} className={view === 'games' ? 'on' : ''} onClick={() => chooseView('games')}>
+          By game
+        </button>
+      </div>
+
+      {view === 'games' ? (
+        <ByGame byGame={details.byGame} onRecord={() => setRecording({})} />
+      ) : (
+        <>
       <div className="two-col stack-lg">
         <div className="stack-sm">
           <SectionTitle title="Who owes whom" />
@@ -104,6 +134,8 @@ export function Payments() {
       <button className="btn block" onClick={() => setRecording({})}>
         Record a different payment
       </button>
+        </>
+      )}
 
       {pending.length > 0 && (
         <div className="stack-sm">
@@ -120,7 +152,7 @@ export function Payments() {
               else if (sides.payee) confirmLabel = unclaimed(p.to_player) ? `Confirm for ${toName}` : 'Yes, I received this';
               return (
                 <li key={p.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                  <PaymentLine p={p} />
+                  <PaymentLine p={p} towards={details.allocations.get(p.id)} />
                   {(confirmLabel || canReject(p, viewer)) && (
                     <div className="btn-row">
                       {confirmLabel && (
@@ -167,7 +199,7 @@ export function Payments() {
           <ul className="list card flush">
             {history.map((p) => (
               <li key={p.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <PaymentLine p={p} />
+                <PaymentLine p={p} towards={details.allocations.get(p.id)} />
                 {p.status === 'confirmed' && g.me.isAdmin && (
                   <button className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => setAction({ kind: 'void', payment: p })}>
                     Void this payment
@@ -221,7 +253,7 @@ export function Payments() {
   );
 }
 
-function PaymentLine({ p }: { p: Payment }) {
+function PaymentLine({ p, towards }: { p: Payment; towards?: Allocation[] }) {
   const g = useGroup();
   const status = {
     pending: <span className="badge warn">Pending</span>,
@@ -238,6 +270,20 @@ function PaymentLine({ p }: { p: Payment }) {
         {status}
       </div>
       {p.note && <span className="small">“{p.note}”</span>}
+      {p.status === 'confirmed' && towards && towards.length > 0 && (
+        <span className="tiny muted">
+          Towards{' '}
+          {towards.map((a, i) => {
+            const game = g.games.find((x) => x.id === a.gameId);
+            return (
+              <span key={a.gameId}>
+                {i > 0 && ', '}
+                <a href={`#/g/${g.group.id}/games/${a.gameId}`}>{game?.name ?? 'a game'}</a> {formatPence(a.amount)}
+              </span>
+            );
+          })}
+        </span>
+      )}
       {(p.status === 'pending' || p.payer_confirmed_at) && (
         <span className="tiny">
           <span className={p.payer_confirmed_at ? 'pos' : 'faint'}>
@@ -363,5 +409,84 @@ function RecordPayment({
         </button>
       </form>
     </Sheet>
+  );
+}
+
+/** Each finished game with where every player stands for it (oldest games are paid off first). */
+function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onRecord: () => void }) {
+  const g = useGroup();
+  const finals = g.games.filter((x) => x.status === 'final' && byGame.has(x.id));
+  const anyOutstanding = finals.some((x) => !byGame.get(x.id)!.settled);
+  const [onlyOutstanding, setOnlyOutstanding] = useState(anyOutstanding);
+  const shown = finals.filter((x) => !onlyOutstanding || !byGame.get(x.id)!.settled);
+
+  if (finals.length === 0) return <Empty title="No finished games yet">Once a game is finalised, you'll see who has paid for it here.</Empty>;
+  return (
+    <div className="stack">
+      <p className="small muted">
+        Payments aren't tied to one game, so each one counts towards the payer's oldest unpaid game first. Winning money back in a later game counts
+        too.
+      </p>
+      <div className="row-between wrap">
+        <label className="row small muted" style={{ minHeight: 40 }}>
+          <input type="checkbox" checked={onlyOutstanding} onChange={(e) => setOnlyOutstanding(e.target.checked)} style={{ width: 20, height: 20 }} />
+          Show only outstanding
+        </label>
+        <button className="btn small" onClick={onRecord}>
+          Record a payment
+        </button>
+      </div>
+      {shown.length === 0 && <Empty title="Every game is settled">Untick “Show only outstanding” to see them all.</Empty>}
+      <div className="entry-list stack">
+        {shown.map((game) => {
+          const s = byGame.get(game.id)!;
+          const rows = [...s.players.entries()]
+            .filter(([, p]) => p.result !== 0)
+            .sort((a, b) => b[1].result - a[1].result);
+          return (
+            <div key={game.id} className="card stack-sm">
+              <div className="row-between" style={{ alignItems: 'flex-start' }}>
+                <a href={`#/g/${g.group.id}/games/${game.id}`} style={{ color: 'inherit' }}>
+                  <b>{game.name}</b>
+                  <span className="small muted" style={{ display: 'block' }}>
+                    {formatDate(game.played_on)}
+                  </span>
+                </a>
+                {s.settled ? <span className="badge green">✓ Settled</span> : <span className="badge warn">Outstanding</span>}
+              </div>
+              <ul className="list">
+                {rows.map(([playerId, p]) => (
+                  <li key={playerId} className="row" style={{ padding: '8px 0', gap: 10 }}>
+                    <Avatar name={g.playerName(playerId)} src={g.avatarForPlayer(playerId)} size={28} />
+                    <span className="grow">
+                      <span className="small">
+                        <b>{g.playerName(playerId)}</b> <span className="muted">{p.result > 0 ? 'won' : 'lost'}</span>{' '}
+                        <span className="num">{formatPence(Math.abs(p.result))}</span>
+                      </span>
+                      {(p.paid > 0 || p.offset > 0) && p.remaining !== 0 && (
+                        <span className="tiny faint" style={{ display: 'block' }}>
+                          {p.paid > 0 && `${formatPence(p.paid)} ${p.result < 0 ? 'paid' : 'received'}`}
+                          {p.paid > 0 && p.offset > 0 && ' · '}
+                          {p.offset > 0 && `${formatPence(p.offset)} evened out by other games`}
+                        </span>
+                      )}
+                    </span>
+                    <span className="small num" style={{ textAlign: 'right' }}>
+                      {p.remaining < 0 ? (
+                        <span className="neg">owes {formatPence(-p.remaining)}</span>
+                      ) : p.remaining > 0 ? (
+                        <span className="pos">is owed {formatPence(p.remaining)}</span>
+                      ) : (
+                        <span className="muted">✓ square</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

@@ -115,6 +115,13 @@ await alice.getByRole('button', { name: 'Yes, I received this' }).click();
 await alice.getByRole('button', { name: 'Confirm', exact: true }).click();
 await alice.getByText('Fully confirmed', { exact: false }).waitFor();
 await shot(alice, '11-payment-confirmed');
+// Payments by game: Ben has paid £5 of his £15 so far, the payment says which game it went towards.
+await alice.getByRole('tab', { name: 'By game' }).click();
+await alice.locator('.card').filter({ hasText: 'Poker night' }).locator('li').filter({ hasText: 'Ben' }).getByText('owes £10').waitFor();
+await alice.locator('.card').filter({ hasText: 'Poker night' }).getByText('£5 paid').waitFor();
+await alice.getByText('Towards', { exact: false }).first().waitFor();
+await shot(alice, '11a-payments-by-game');
+await alice.getByRole('tab', { name: 'Everyone' }).click();
 
 // Games list shows money still outstanding; the game can be renamed after it's finished.
 await alice.getByRole('link', { name: 'Games' }).last().click();
