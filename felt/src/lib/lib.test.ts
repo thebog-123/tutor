@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatPence, parsePounds, penceToInput } from './money';
-import { simplifyDebts, type Balance } from './settle';
+import { matchTransfers, simplifyDebts, type Balance } from './settle';
 import { entryProfit, gameTotals, leaderboard, sortLeaderboard, type GameLike } from './stats';
 import { toCSV, penceToDecimal } from './csv';
 import { validateBackup } from './backup';
@@ -329,5 +329,17 @@ describe('settlementByGame', () => {
   it('treats a break-even night as settled for that player', () => {
     const g = game('g', '2026-10-01', [['a', 0], ['b', 0]]);
     expect(settlementByGame([g], []).get('g')!.settled).toBe(true);
+  });
+});
+
+describe('matchTransfers', () => {
+  const b = (id: string, balance: number) => ({ id, name: id, balance });
+  it('pairs debts with credits even when they do not add up to zero', () => {
+    expect(matchTransfers([b('ben', -1000), b('dev', -2000), b('alice', 2000), b('chloe', 1000)])).toEqual([
+      { from: 'dev', to: 'alice', amount: 2000 },
+      { from: 'ben', to: 'chloe', amount: 1000 },
+    ]);
+    expect(matchTransfers([b('ben', -1500), b('alice', 500)])).toEqual([{ from: 'ben', to: 'alice', amount: 500 }]);
+    expect(matchTransfers([b('ben', -1500)])).toEqual([]);
   });
 });

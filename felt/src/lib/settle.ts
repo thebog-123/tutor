@@ -98,3 +98,12 @@ export function simplifyDebts(balances: Balance[]): Transfer[] {
   if (people.length > EXACT_LIMIT) return greedy(people);
   return zeroSumGroups(people).flatMap(greedy);
 }
+
+/**
+ * Pair people who owe with people who are owed, largest first, even when the
+ * amounts don't add up to zero (as within a single game, where part of a debt
+ * may already have been evened out elsewhere). Whatever can't be paired is left out.
+ */
+export function matchTransfers(balances: Balance[]): Transfer[] {
+  return greedy(balances.filter((b) => b.balance !== 0).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)));
+}

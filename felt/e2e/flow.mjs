@@ -120,6 +120,11 @@ await alice.getByRole('tab', { name: 'By game' }).click();
 await alice.locator('.card').filter({ hasText: 'Poker night' }).locator('li').filter({ hasText: 'Ben' }).getByText('owes £10').waitFor();
 await alice.locator('.card').filter({ hasText: 'Poker night' }).getByText('£5 paid').waitFor();
 await alice.getByText('Towards', { exact: false }).first().waitFor();
+const card = alice.locator('.card').filter({ hasText: 'Poker night' }).filter({ hasText: 'Who pays whom' });
+await card.waitFor();
+for (const line of ['Dev pays Alice £20', 'Ben pays Chloe £10']) {
+  if (!(await card.innerText()).replace(/\s+/g, ' ').includes(line)) errors.push(`by-game card missing "${line}"`);
+}
 await shot(alice, '11a-payments-by-game');
 await alice.getByRole('tab', { name: 'Everyone' }).click();
 

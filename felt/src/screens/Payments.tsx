@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { rpc } from '../supabase';
 import { useGroup } from '../data';
-import { simplifyDebts, type Transfer } from '../lib/settle';
+import { matchTransfers, simplifyDebts, type Transfer } from '../lib/settle';
 import { formatPence } from '../lib/money';
 import { Avatar, Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDate, formatDateTime, useToast } from '../ui';
 import type { Payment } from '../types';
@@ -70,7 +70,7 @@ export function Payments() {
       </div>
 
       {view === 'games' ? (
-        <ByGame byGame={details.byGame} onRecord={() => setRecording({})} />
+        <ByGame byGame={details.byGame} onRecord={(prefill) => setRecording(prefill ?? {})} />
       ) : (
         <>
       <div className="two-col stack-lg">
@@ -413,9 +413,17 @@ function RecordPayment({
 }
 
 /** Each finished game with where every player stands for it (oldest games are paid off first). */
-function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onRecord: () => void }) {
+function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onRecord: (prefill?: { from: string; to: string; amount: number }) => void }) {
   const g = useGroup();
   const finals = g.games.filter((x) => x.status === 'final' && byGame.has(x.id));
+  const myPlayerId = g.me.player?.id;
+  const overall = (id: string) => g.balances.find((b) => b.player_id === id)?.balance_pence ?? 0;
+  // Who pays whom for one game: pair that game's debts with its credits. Capped at what's
+  // still owed overall, so a suggestion never asks for more than the server would accept.
+  const transfersFor = (s: GameSettlement) =>
+    matchTransfers([...s.players.entries()].map(([id, p]) => ({ id, name: g.playerName(id), balance: p.remaining })))
+      .map((t) => ({ ...t, amount: Math.min(t.amount, Math.max(-overall(t.from), 0), Math.max(overall(t.to), 0)) }))
+      .filter((t) => t.amount > 0);
   const anyOutstanding = finals.some((x) => !byGame.get(x.id)!.settled);
   const [onlyOutstanding, setOnlyOutstanding] = useState(anyOutstanding);
   const shown = finals.filter((x) => !onlyOutstanding || !byGame.get(x.id)!.settled);
@@ -432,7 +440,7 @@ function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onR
           <input type="checkbox" checked={onlyOutstanding} onChange={(e) => setOnlyOutstanding(e.target.checked)} style={{ width: 20, height: 20 }} />
           Show only outstanding
         </label>
-        <button className="btn small" onClick={onRecord}>
+        <button className="btn small" onClick={() => onRecord()}>
           Record a payment
         </button>
       </div>
@@ -483,6 +491,28 @@ function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onR
                   </li>
                 ))}
               </ul>
+              {(() => {
+                const transfers = transfersFor(s);
+                if (!transfers.length) return null;
+                return (
+                  <div className="stack-sm" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                    <span className="label-text">Who pays whom</span>
+                    {transfers.map((t) => (
+                      <div key={`${t.from}-${t.to}`} className="row" style={{ gap: 10 }}>
+                        <span className="grow small">
+                          <b>{g.playerName(t.from)}</b> pays <b>{g.playerName(t.to)}</b>{' '}
+                          <span className="lime num" style={{ fontWeight: 700 }}>
+                            {formatPence(t.amount)}
+                          </span>
+                        </span>
+                        <button className="btn small" onClick={() => onRecord(t)}>
+                          {t.from === myPlayerId ? "I've paid" : t.to === myPlayerId ? "I've been paid" : 'Record'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
