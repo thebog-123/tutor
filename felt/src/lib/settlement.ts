@@ -10,6 +10,7 @@
 // A player is square for a game once that game's lot is used up; a game is
 // settled once every player in it is square.
 import { entryProfit, type EntryLike } from './stats';
+import { matchTransfers, simplifyDebts } from './settle';
 
 interface GameIn {
   id: string;
@@ -116,4 +117,49 @@ export function settlementDetails(
 
 export function settlementByGame(games: GameIn[], payments: PaymentIn[]): Map<string, GameSettlement> {
   return settlementDetails(games, payments).byGame;
+}
+
+// ---------------------------------------------------------------------------
+// Who owes whom, game by game: each game's own results turned into the fewest
+// "X owes Y" lines for that game. A confirmed payment from X to Y pays off X's
+// lines to Y, oldest game first.
+// ---------------------------------------------------------------------------
+
+export interface DebtLine {
+  from: string;
+  to: string;
+  amount: number; // pennies owed from this game
+  paid: number; // pennies of it covered by payments from `from` to `to`
+}
+
+export function debtsByGame(games: GameIn[], payments: PaymentIn[]): Map<string, DebtLine[]> {
+  const finals = games
+    .filter((g) => g.status === 'final')
+    .sort((a, b) => (a.finalised_at ?? a.updated_at).localeCompare(b.finalised_at ?? b.updated_at));
+  const pool = new Map<string, number>(); // "from|to" -> confirmed pennies not yet used
+  for (const p of payments) {
+    if (p.status !== 'confirmed') continue;
+    const key = `${p.from_player}|${p.to_player}`;
+    pool.set(key, (pool.get(key) ?? 0) + p.amount_pence);
+  }
+  const out = new Map<string, DebtLine[]>();
+  for (const g of finals) {
+    const balances = g.entries.map((e) => ({ id: e.player_id, name: e.player_id, balance: entryProfit(e) }));
+    let transfers;
+    try {
+      transfers = simplifyDebts(balances);
+    } catch {
+      transfers = matchTransfers(balances); // only if a game somehow doesn't balance
+    }
+    out.set(
+      g.id,
+      transfers.map((t) => {
+        const key = `${t.from}|${t.to}`;
+        const paid = Math.min(t.amount, pool.get(key) ?? 0);
+        pool.set(key, (pool.get(key) ?? 0) - paid);
+        return { from: t.from, to: t.to, amount: t.amount, paid };
+      }),
+    );
+  }
+  return out;
 }

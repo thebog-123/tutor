@@ -115,16 +115,15 @@ await alice.getByRole('button', { name: 'Yes, I received this' }).click();
 await alice.getByRole('button', { name: 'Confirm', exact: true }).click();
 await alice.getByText('Fully confirmed', { exact: false }).waitFor();
 await shot(alice, '11-payment-confirmed');
-// Payments by game: Ben has paid £5 of his £15 so far, the payment says which game it went towards.
+// Payments by game: who owes whom from that game, and which of it is paid.
 await alice.getByRole('tab', { name: 'By game' }).click();
-await alice.locator('.card').filter({ hasText: 'Poker night' }).locator('li').filter({ hasText: 'Ben' }).getByText('owes £10').waitFor();
-await alice.locator('.card').filter({ hasText: 'Poker night' }).getByText('£5 paid').waitFor();
-await alice.getByText('Towards', { exact: false }).first().waitFor();
-const card = alice.locator('.card').filter({ hasText: 'Poker night' }).filter({ hasText: 'Who pays whom' });
-await card.waitFor();
-for (const line of ['Dev pays Alice £20', 'Ben pays Chloe £10']) {
-  if (!(await card.innerText()).replace(/\s+/g, ' ').includes(line)) errors.push(`by-game card missing "${line}"`);
+const card = alice.locator('.card').filter({ has: alice.getByRole('list', { name: 'Who owes whom for Poker night' }) });
+await card.getByText('Not paid yet').first().waitFor();
+const cardText = (await card.innerText()).replace(/\s+/g, ' ');
+for (const line of ['Dev owes Alice £20 Not paid yet', 'Ben owes Alice £5 ✓ Paid', 'Ben owes Chloe £10 Not paid yet']) {
+  if (!cardText.includes(line)) errors.push(`by-game card missing "${line}": ${cardText}`);
 }
+await alice.getByText('Towards', { exact: false }).first().waitFor();
 await shot(alice, '11a-payments-by-game');
 await alice.getByRole('tab', { name: 'Everyone' }).click();
 

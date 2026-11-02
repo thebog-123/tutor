@@ -267,7 +267,7 @@ describe('rivalries and performance', () => {
   });
 });
 
-import { settlementByGame, settlementDetails } from './settlement';
+import { debtsByGame, settlementByGame, settlementDetails } from './settlement';
 
 describe('settlementByGame', () => {
   const game = (id: string, t: string, rows: [string, number][]) => ({
@@ -341,5 +341,36 @@ describe('matchTransfers', () => {
     ]);
     expect(matchTransfers([b('ben', -1500), b('alice', 500)])).toEqual([{ from: 'ben', to: 'alice', amount: 500 }]);
     expect(matchTransfers([b('ben', -1500)])).toEqual([]);
+  });
+});
+
+describe('debtsByGame', () => {
+  const game = (id: string, t: string, rows: [string, number][]) => ({
+    id,
+    status: 'final',
+    finalised_at: t,
+    updated_at: t,
+    entries: rows.map(([player_id, profit]) => ({ player_id, buy_in_pence: 2000, rebuys_pence: [], cash_out_pence: 2000 + profit })),
+  });
+  const pay = (from: string, to: string, amount: number, status = 'confirmed') => ({ from_player: from, to_player: to, amount_pence: amount, status, confirmed_at: '2026-11-01' });
+  const night1 = game('n1', '2026-10-01', [['alice', 2500], ['chloe', 1000], ['ben', -1500], ['dev', -2000]]);
+  const night2 = game('n2', '2026-10-08', [['chloe', 500], ['ben', -500]]);
+
+  it('lists who owes whom from each game on its own', () => {
+    const lines = debtsByGame([night1, night2], []).get('n1')!;
+    const total = (who: string) => lines.filter((l) => l.from === who).reduce((a, l) => a + l.amount, 0);
+    expect(total('ben')).toBe(1500);
+    expect(total('dev')).toBe(2000);
+    expect(lines.filter((l) => l.to === 'alice').reduce((a, l) => a + l.amount, 0)).toBe(2500);
+    expect(lines.every((l) => l.paid === 0)).toBe(true);
+    expect(debtsByGame([night1, night2], []).get('n2')).toEqual([{ from: 'ben', to: 'chloe', amount: 500, paid: 0 }]);
+  });
+  it('pays off a pair\'s lines oldest game first, ignoring unconfirmed payments', () => {
+    const lines1 = debtsByGame([night1], []).get('n1')!;
+    const ben = lines1.find((l) => l.from === 'ben')!;
+    const res = debtsByGame([night1, night2], [pay(ben.from, ben.to, ben.amount + 300), pay('ben', 'chloe', 999, 'pending')]);
+    expect(res.get('n1')!.find((l) => l.from === 'ben')!.paid).toBe(ben.amount);
+    if (ben.to === 'chloe') expect(res.get('n2')![0].paid).toBe(300);
+    else expect(res.get('n2')![0].paid).toBe(0);
   });
 });

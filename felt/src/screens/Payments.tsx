@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import { rpc } from '../supabase';
 import { useGroup } from '../data';
-import { matchTransfers, simplifyDebts, type Transfer } from '../lib/settle';
+import { simplifyDebts, type Transfer } from '../lib/settle';
 import { formatPence } from '../lib/money';
 import { Avatar, Banner, Confirm, Empty, ErrorBanner, Money, MoneyInput, SectionTitle, Sheet, formatDate, formatDateTime, useToast } from '../ui';
 import type { Payment } from '../types';
 import { canReject, confirmableSides, needsMe, type Viewer } from '../lib/payments';
-import { settlementDetails, type Allocation, type GameSettlement } from '../lib/settlement';
+import { debtsByGame, settlementDetails, type Allocation, type GameSettlement } from '../lib/settlement';
 
 export function Payments() {
   const g = useGroup();
@@ -412,28 +412,22 @@ function RecordPayment({
   );
 }
 
-/** Each finished game with where every player stands for it (oldest games are paid off first). */
+/** Each finished game, with who owes whom from that game and how much of it has been paid. */
 function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onRecord: (prefill?: { from: string; to: string; amount: number }) => void }) {
   const g = useGroup();
   const finals = g.games.filter((x) => x.status === 'final' && byGame.has(x.id));
+  const debts = useMemo(() => debtsByGame(g.games, g.payments), [g.games, g.payments]);
   const myPlayerId = g.me.player?.id;
   const overall = (id: string) => g.balances.find((b) => b.player_id === id)?.balance_pence ?? 0;
-  // Who pays whom for one game: pair that game's debts with its credits. Capped at what's
-  // still owed overall, so a suggestion never asks for more than the server would accept.
-  const transfersFor = (s: GameSettlement) =>
-    matchTransfers([...s.players.entries()].map(([id, p]) => ({ id, name: g.playerName(id), balance: p.remaining })))
-      .map((t) => ({ ...t, amount: Math.min(t.amount, Math.max(-overall(t.from), 0), Math.max(overall(t.to), 0)) }))
-      .filter((t) => t.amount > 0);
   const anyOutstanding = finals.some((x) => !byGame.get(x.id)!.settled);
   const [onlyOutstanding, setOnlyOutstanding] = useState(anyOutstanding);
   const shown = finals.filter((x) => !onlyOutstanding || !byGame.get(x.id)!.settled);
 
-  if (finals.length === 0) return <Empty title="No finished games yet">Once a game is finalised, you'll see who has paid for it here.</Empty>;
+  if (finals.length === 0) return <Empty title="No finished games yet">Once a game is finalised, you'll see who owes whom for it here.</Empty>;
   return (
     <div className="stack">
       <p className="small muted">
-        Payments aren't tied to one game, so each one counts towards the payer's oldest unpaid game first. Winning money back in a later game counts
-        too.
+        Each game's results split into who owes whom. A payment from one person to another counts against what they owe each other, oldest game first.
       </p>
       <div className="row-between wrap">
         <label className="row small muted" style={{ minHeight: 40 }}>
@@ -448,9 +442,8 @@ function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onR
       <div className="entry-list stack">
         {shown.map((game) => {
           const s = byGame.get(game.id)!;
-          const rows = [...s.players.entries()]
-            .filter(([, p]) => p.result !== 0)
-            .sort((a, b) => b[1].result - a[1].result);
+          const lines = [...(debts.get(game.id) ?? [])].sort((a, b) => b.amount - a.amount);
+          const results = [...s.players.entries()].filter(([, p]) => p.result !== 0).sort((a, b) => b[1].result - a[1].result);
           return (
             <div key={game.id} className="card stack-sm">
               <div className="row-between" style={{ alignItems: 'flex-start' }}>
@@ -462,57 +455,60 @@ function ByGame({ byGame, onRecord }: { byGame: Map<string, GameSettlement>; onR
                 </a>
                 {s.settled ? <span className="badge green">✓ Settled</span> : <span className="badge warn">Outstanding</span>}
               </div>
-              <ul className="list">
-                {rows.map(([playerId, p]) => (
-                  <li key={playerId} className="row" style={{ padding: '8px 0', gap: 10 }}>
-                    <Avatar name={g.playerName(playerId)} src={g.avatarForPlayer(playerId)} size={28} />
-                    <span className="grow">
-                      <span className="small">
-                        <b>{g.playerName(playerId)}</b> <span className="muted">{p.result > 0 ? 'won' : 'lost'}</span>{' '}
-                        <span className="num">{formatPence(Math.abs(p.result))}</span>
-                      </span>
-                      {(p.paid > 0 || p.offset > 0) && p.remaining !== 0 && (
-                        <span className="tiny faint" style={{ display: 'block' }}>
-                          {p.paid > 0 && `${formatPence(p.paid)} ${p.result < 0 ? 'paid' : 'received'}`}
-                          {p.paid > 0 && p.offset > 0 && ' · '}
-                          {p.offset > 0 && `${formatPence(p.offset)} evened out by other games`}
-                        </span>
-                      )}
-                    </span>
-                    <span className="small num" style={{ textAlign: 'right' }}>
-                      {p.remaining < 0 ? (
-                        <span className="neg">owes {formatPence(-p.remaining)}</span>
-                      ) : p.remaining > 0 ? (
-                        <span className="pos">is owed {formatPence(p.remaining)}</span>
-                      ) : (
-                        <span className="muted">✓ square</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {(() => {
-                const transfers = transfersFor(s);
-                if (!transfers.length) return null;
-                return (
-                  <div className="stack-sm" style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                    <span className="label-text">Who pays whom</span>
-                    {transfers.map((t) => (
-                      <div key={`${t.from}-${t.to}`} className="row" style={{ gap: 10 }}>
-                        <span className="grow small">
-                          <b>{g.playerName(t.from)}</b> pays <b>{g.playerName(t.to)}</b>{' '}
-                          <span className="lime num" style={{ fontWeight: 700 }}>
-                            {formatPence(t.amount)}
+
+              {lines.length === 0 ? (
+                <p className="small muted">Nobody owes anything from this game.</p>
+              ) : (
+                <ul className="list" aria-label={`Who owes whom for ${game.name}`}>
+                  {lines.map((l) => {
+                    const left = l.amount - l.paid;
+                    const squaredElsewhere = left > 0 && (s.players.get(l.from)?.remaining ?? 0) === 0;
+                    const done = left === 0 || squaredElsewhere;
+                    const suggest = Math.min(left, Math.max(-overall(l.from), 0), Math.max(overall(l.to), 0));
+                    return (
+                      <li key={`${l.from}-${l.to}`} className="row" style={{ padding: '10px 0', gap: 10 }}>
+                        <Avatar name={g.playerName(l.from)} src={g.avatarForPlayer(l.from)} size={28} />
+                        <span className="grow" style={done ? { opacity: 0.7 } : undefined}>
+                          <span className="small">
+                            <b>{g.playerName(l.from)}</b> owes <b>{g.playerName(l.to)}</b>{' '}
+                            <span className="num" style={{ fontWeight: 700 }}>
+                              {formatPence(l.amount)}
+                            </span>
+                          </span>
+                          <span className="tiny" style={{ display: 'block' }}>
+                            {left === 0 ? (
+                              <span className="pos">✓ Paid</span>
+                            ) : squaredElsewhere ? (
+                              <span className="pos">✓ Settled another way (other payments or later games)</span>
+                            ) : l.paid > 0 ? (
+                              <span className="muted">
+                                {formatPence(l.paid)} paid · <span className="neg">{formatPence(left)} to go</span>
+                              </span>
+                            ) : (
+                              <span className="neg">Not paid yet</span>
+                            )}
                           </span>
                         </span>
-                        <button className="btn small" onClick={() => onRecord(t)}>
-                          {t.from === myPlayerId ? "I've paid" : t.to === myPlayerId ? "I've been paid" : 'Record'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+                        {!done && suggest > 0 && (
+                          <button className="btn small" onClick={() => onRecord({ from: l.from, to: l.to, amount: suggest })}>
+                            {l.from === myPlayerId ? "I've paid" : l.to === myPlayerId ? "I've been paid" : 'Record'}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <p className="tiny faint" style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                Results:{' '}
+                {results.map(([id, p], i) => (
+                  <span key={id}>
+                    {i > 0 && ' · '}
+                    {g.playerName(id)} <span className={`num ${p.result > 0 ? 'pos' : 'neg'}`}>{formatPence(p.result, { sign: true })}</span>
+                  </span>
+                ))}
+              </p>
             </div>
           );
         })}
