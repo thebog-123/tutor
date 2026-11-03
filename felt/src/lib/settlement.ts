@@ -3,11 +3,10 @@
 // Each finished game's own results are split into the fewest "X owes Y" lines
 // for that game. Debts are then tracked between pairs of players:
 //  - a confirmed payment from X to Y pays off X's lines to Y, oldest game first;
-//  - if X owes Y from one game and Y owes X from another, those amounts cancel
-//    out ("evened out between you"), oldest first.
-// A game is settled once all its lines are paid or evened out. Each player's
-// overall balance is still the sum of their results and payments, so it always
-// agrees with these lines.
+//  - debts never cancel out: if X owes Y from one game and Y owes X from
+//    another, both are still paid separately.
+// A game is settled once all its lines are paid. Each player's overall balance
+// is still the sum of their results and payments, so it agrees with these lines.
 import { entryProfit, type EntryLike } from './stats';
 import { matchTransfers, simplifyDebts } from './settle';
 
@@ -33,7 +32,6 @@ export interface DebtLine {
   to: string;
   amount: number; // pennies owed from this game
   paid: number; // covered by payments from `from` to `to`
-  offset: number; // cancelled out by `to` owing `from` from another game
   left: number; // still to pay
 }
 
@@ -70,7 +68,7 @@ export function settle(games: GameIn[], payments: PaymentIn[]): Settlement {
     } catch {
       transfers = matchTransfers(balances); // only if a game somehow doesn't balance
     }
-    const list = transfers.map((t) => ({ gameId: g.id, from: t.from, to: t.to, amount: t.amount, paid: 0, offset: 0, left: t.amount }));
+    const list = transfers.map((t) => ({ gameId: g.id, from: t.from, to: t.to, amount: t.amount, paid: 0, left: t.amount }));
     lines.set(g.id, list);
     for (const l of list) {
       const key = `${l.from}|${l.to}`;
@@ -100,38 +98,21 @@ export function settle(games: GameIn[], payments: PaymentIn[]): Settlement {
     }
   }
 
-  // Debts both ways between two people cancel out, oldest first.
+  // What each person still owes each other person, one direction at a time.
+  // (A payment beyond what's owed counts as the other person owing it back.)
   const people = new Set<string>();
   for (const key of byPair.keys()) key.split('|').forEach((x) => people.add(x));
   for (const p of confirmed) [p.from_player, p.to_player].forEach((x) => people.add(x));
   const pairs: PairDebt[] = [];
-  const ids = [...people].sort();
-  for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) {
-      const [a, b] = [ids[i], ids[j]];
-      const ab = byPair.get(`${a}|${b}`) ?? [];
-      const ba = byPair.get(`${b}|${a}`) ?? [];
-      const cancel = Math.min(sum(ab.map((l) => l.left)), sum(ba.map((l) => l.left)));
-      for (const side of [ab, ba]) {
-        let c = cancel;
-        for (const l of side) {
-          const use = Math.min(l.left, c);
-          l.offset += use;
-          l.left -= use;
-          c -= use;
-        }
-      }
-      // What a still owes b overall (overpayments push it the other way).
-      const net =
-        sum(ab.map((l) => l.amount)) - sum(ba.map((l) => l.amount)) - (paidTotal.get(`${a}|${b}`) ?? 0) + (paidTotal.get(`${b}|${a}`) ?? 0);
-      if (net === 0) continue;
-      const [from, to, side] = net > 0 ? [a, b, ab] : [b, a, ba];
-      pairs.push({
-        from,
-        to,
-        amount: Math.abs(net),
-        games: side.filter((l) => l.left > 0).map((l) => ({ gameId: l.gameId, amount: l.left })),
-      });
+  for (const from of people) {
+    for (const to of people) {
+      if (from === to) continue;
+      const side = byPair.get(`${from}|${to}`) ?? [];
+      const owed = sum(side.map((l) => l.left));
+      const overpaid = Math.max(0, (paidTotal.get(`${to}|${from}`) ?? 0) - sum((byPair.get(`${to}|${from}`) ?? []).map((l) => l.amount)));
+      const amount = owed + overpaid;
+      if (amount === 0) continue;
+      pairs.push({ from, to, amount, games: side.filter((l) => l.left > 0).map((l) => ({ gameId: l.gameId, amount: l.left })) });
     }
   }
   pairs.sort((x, y) => y.amount - x.amount || x.from.localeCompare(y.from) || x.to.localeCompare(y.to));

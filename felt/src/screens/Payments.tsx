@@ -97,7 +97,7 @@ export function Payments() {
             </ul>
           )}
           <p className="tiny faint">
-            Worked out game by game. If two people owe each other from different games, those amounts cancel out.
+            Worked out game by game. Each game's debts are paid separately, even if two people owe each other from different games.
           </p>
         </div>
 
@@ -466,7 +466,7 @@ function ByGame({ settlement, onRecord }: { settlement: Settlement; onRecord: (p
                   {lines.map((l) => {
                     const done = l.left === 0;
                     const suggest = Math.min(l.left, pairOwed(l.from, l.to));
-                    const parts = [l.paid > 0 && `${formatPence(l.paid)} paid`, l.offset > 0 && `${formatPence(l.offset)} evened out between them`].filter(Boolean).join(' · ');
+                    const parts = l.paid > 0 ? `${formatPence(l.paid)} paid` : '';
                     return (
                       <li key={`${l.from}-${l.to}`} className="row" style={{ padding: '10px 0', gap: 10 }}>
                         <Avatar name={g.playerName(l.from)} src={g.avatarForPlayer(l.from)} size={28} />
@@ -479,7 +479,7 @@ function ByGame({ settlement, onRecord }: { settlement: Settlement; onRecord: (p
                           </span>
                           <span className="tiny" style={{ display: 'block' }}>
                             {done ? (
-                              <span className="pos">✓ {l.offset === 0 ? 'Paid' : l.paid === 0 ? 'Evened out between them (they owe each other from another game)' : parts}</span>
+                              <span className="pos">✓ Paid</span>
                             ) : parts ? (
                               <span className="muted">
                                 {parts} · <span className="neg">{formatPence(l.left)} to go</span>
