@@ -267,71 +267,6 @@ describe('rivalries and performance', () => {
   });
 });
 
-import { debtsByGame, settlementByGame, settlementDetails } from './settlement';
-
-describe('settlementByGame', () => {
-  const game = (id: string, t: string, rows: [string, number][]) => ({
-    id,
-    status: 'final',
-    finalised_at: t,
-    updated_at: t,
-    entries: rows.map(([player_id, profit]) => ({ player_id, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: 1000 + profit })),
-  });
-  const pay = (from: string, to: string, amount: number, t: string, status = 'confirmed') => ({
-    from_player: from, to_player: to, amount_pence: amount, status, confirmed_at: status === 'confirmed' ? t : null,
-  });
-  const g1 = game('g1', '2026-10-01', [['a', 500], ['b', -500]]);
-  const g2 = game('g2', '2026-10-08', [['a', -300], ['b', 300]]);
-
-  it('is outstanding until the money moves, and pending payments do not count', () => {
-    const s = settlementByGame([g1], [pay('b', 'a', 500, '2026-10-02', 'pending')]);
-    expect(s.get('g1')).toMatchObject({ settled: false, outstanding: ['a', 'b'] });
-  });
-  it('is settled when the confirmed payment squares everyone up', () => {
-    expect(settlementByGame([g1], [pay('b', 'a', 500, '2026-10-02')]).get('g1')!.settled).toBe(true);
-  });
-  it('stays outstanding after a part payment', () => {
-    expect(settlementByGame([g1], [pay('b', 'a', 200, '2026-10-02')]).get('g1')!.settled).toBe(false);
-  });
-  it('counts winnings in a later game against an older debt', () => {
-    // b owes 5 from g1, wins 3 in g2 (now owes 2): g2 is square for b, g1 is not.
-    const s = settlementByGame([g1, g2], []);
-    expect(s.get('g1')).toMatchObject({ settled: false, outstanding: ['a', 'b'] });
-    expect(s.get('g2')).toMatchObject({ settled: true, outstanding: [] });
-    // b pays the remaining 2: everything settles.
-    const done = settlementByGame([g1, g2], [pay('b', 'a', 200, '2026-10-09')]);
-    expect([done.get('g1')!.settled, done.get('g2')!.settled]).toEqual([true, true]);
-  });
-  it('closes older games and opens the new one when a balance flips', () => {
-    const g3 = game('g3', '2026-10-15', [['a', -800], ['b', 800]]); // a: +5 -> -3, b: -5 -> +3
-    const s = settlementByGame([g1, g3], []);
-    expect(s.get('g1')!.settled).toBe(true);
-    expect(s.get('g3')).toMatchObject({ settled: false, outstanding: ['a', 'b'] });
-  });
-  it('tracks how much is left, paid and offset per game, oldest game first', () => {
-    // b owes 5 (g1), wins 3 back (g2), then pays 1: 1 + 3 went to g1, 1 still owed.
-    const { byGame, allocations } = settlementDetails([g1, g2], [{ id: 'p1', ...pay('b', 'a', 100, '2026-10-09') }]);
-    expect(byGame.get('g1')!.players.get('b')).toEqual({ result: -500, remaining: -100, paid: 100, offset: 300 });
-    expect(byGame.get('g2')!.players.get('b')).toEqual({ result: 300, remaining: 0, paid: 0, offset: 0 });
-    expect(byGame.get('g1')!.players.get('a')).toEqual({ result: 500, remaining: 100, paid: 100, offset: 300 });
-    expect(allocations.get('p1')).toEqual([{ gameId: 'g1', amount: 100 }]);
-  });
-  it('splits a payment across games, oldest first', () => {
-    const g3 = game('g3', '2026-10-15', [['a', 200], ['b', -200]]); // b owes 5 + 2
-    const { byGame, allocations } = settlementDetails([g1, g3], [{ id: 'p', ...pay('b', 'a', 600, '2026-10-20') }]);
-    expect(allocations.get('p')).toEqual([
-      { gameId: 'g1', amount: 500 },
-      { gameId: 'g3', amount: 100 },
-    ]);
-    expect(byGame.get('g1')!.settled).toBe(true);
-    expect(byGame.get('g3')!.players.get('b')!.remaining).toBe(-100);
-  });
-  it('treats a break-even night as settled for that player', () => {
-    const g = game('g', '2026-10-01', [['a', 0], ['b', 0]]);
-    expect(settlementByGame([g], []).get('g')!.settled).toBe(true);
-  });
-});
-
 describe('matchTransfers', () => {
   const b = (id: string, balance: number) => ({ id, name: id, balance });
   it('pairs debts with credits even when they do not add up to zero', () => {
@@ -344,7 +279,10 @@ describe('matchTransfers', () => {
   });
 });
 
-describe('debtsByGame', () => {
+
+import { settle } from './settlement';
+
+describe('settle (who owes whom, game by game)', () => {
   const game = (id: string, t: string, rows: [string, number][]) => ({
     id,
     status: 'final',
@@ -352,25 +290,51 @@ describe('debtsByGame', () => {
     updated_at: t,
     entries: rows.map(([player_id, profit]) => ({ player_id, buy_in_pence: 2000, rebuys_pence: [], cash_out_pence: 2000 + profit })),
   });
-  const pay = (from: string, to: string, amount: number, status = 'confirmed') => ({ from_player: from, to_player: to, amount_pence: amount, status, confirmed_at: '2026-11-01' });
-  const night1 = game('n1', '2026-10-01', [['alice', 2500], ['chloe', 1000], ['ben', -1500], ['dev', -2000]]);
-  const night2 = game('n2', '2026-10-08', [['chloe', 500], ['ben', -500]]);
-
-  it('lists who owes whom from each game on its own', () => {
-    const lines = debtsByGame([night1, night2], []).get('n1')!;
-    const total = (who: string) => lines.filter((l) => l.from === who).reduce((a, l) => a + l.amount, 0);
-    expect(total('ben')).toBe(1500);
-    expect(total('dev')).toBe(2000);
-    expect(lines.filter((l) => l.to === 'alice').reduce((a, l) => a + l.amount, 0)).toBe(2500);
-    expect(lines.every((l) => l.paid === 0)).toBe(true);
-    expect(debtsByGame([night1, night2], []).get('n2')).toEqual([{ from: 'ben', to: 'chloe', amount: 500, paid: 0 }]);
+  const pay = (id: string, from: string, to: string, amount: number, t = '2026-11-01', status = 'confirmed') => ({
+    id, from_player: from, to_player: to, amount_pence: amount, status, confirmed_at: status === 'confirmed' ? t : null,
   });
-  it('pays off a pair\'s lines oldest game first, ignoring unconfirmed payments', () => {
-    const lines1 = debtsByGame([night1], []).get('n1')!;
-    const ben = lines1.find((l) => l.from === 'ben')!;
-    const res = debtsByGame([night1, night2], [pay(ben.from, ben.to, ben.amount + 300), pay('ben', 'chloe', 999, 'pending')]);
-    expect(res.get('n1')!.find((l) => l.from === 'ben')!.paid).toBe(ben.amount);
-    if (ben.to === 'chloe') expect(res.get('n2')![0].paid).toBe(300);
-    else expect(res.get('n2')![0].paid).toBe(0);
+  // Like the reported Game 7: vansch was owed money from an earlier game, but still owes torta £5 for game 7.
+  const g6 = game('g6', '2026-10-27', [['vansch', 1000], ['mince', -1000]]);
+  const g7 = game('g7', '2026-11-03', [['mince', 1465], ['torta', 785], ['oscapi', -500], ['alex', -500], ['vansch', -500], ['aarav', -750]]);
+
+  it('keeps each game\'s debts until that person is actually paid', () => {
+    const s = settle([g6, g7], []);
+    expect(s.settled.get('g7')).toBe(false);
+    const vansch = s.lines.get('g7')!.filter((l) => l.from === 'vansch');
+    expect(vansch.reduce((a, l) => a + l.left, 0)).toBe(500); // not "settled another way"
+    const total = s.lines.get('g7')!.reduce((a, l) => a + l.amount, 0);
+    expect(total).toBe(1465 + 785);
+  });
+  it('cancels out debts both ways between the same two people', () => {
+    // vansch owes mince from g7 only if the split pairs them; force a clear case:
+    const x = game('x', '2026-10-01', [['a', 1000], ['b', -1000]]); // b owes a 10
+    const y = game('y', '2026-10-08', [['a', -400], ['b', 400]]); // a owes b 4
+    const s = settle([x, y], []);
+    expect(s.lines.get('y')![0]).toMatchObject({ from: 'a', to: 'b', amount: 400, offset: 400, left: 0 });
+    expect(s.lines.get('x')![0]).toMatchObject({ from: 'b', to: 'a', amount: 1000, offset: 400, left: 600 });
+    expect(s.settled.get('y')).toBe(true);
+    expect(s.pairs).toEqual([{ from: 'b', to: 'a', amount: 600, games: [{ gameId: 'x', amount: 600 }] }]);
+  });
+  it('pays off a pair\'s lines oldest game first and records which games a payment covered', () => {
+    const x = game('x', '2026-10-01', [['a', 1000], ['b', -1000]]);
+    const y = game('y', '2026-10-08', [['a', 300], ['b', -300]]);
+    const s = settle([x, y], [pay('p1', 'b', 'a', 1100), pay('p2', 'b', 'a', 999, '2026-11-02', 'pending')]);
+    expect(s.lines.get('x')![0]).toMatchObject({ paid: 1000, left: 0 });
+    expect(s.lines.get('y')![0]).toMatchObject({ paid: 100, left: 200 });
+    expect(s.allocations.get('p1')).toEqual([{ gameId: 'x', amount: 1000 }, { gameId: 'y', amount: 100 }]);
+    expect(s.pairs).toEqual([{ from: 'b', to: 'a', amount: 200, games: [{ gameId: 'y', amount: 200 }] }]);
+    expect([s.settled.get('x'), s.settled.get('y')]).toEqual([true, false]);
+  });
+  it('agrees with everyone\'s overall balance', () => {
+    const s = settle([g6, g7], [pay('p', 'aarav', 'mince', 300)]);
+    const owed = new Map<string, number>();
+    for (const p of s.pairs) {
+      owed.set(p.from, (owed.get(p.from) ?? 0) - p.amount);
+      owed.set(p.to, (owed.get(p.to) ?? 0) + p.amount);
+    }
+    // overall: results + paid - received
+    expect(owed.get('vansch')).toBe(1000 - 500);
+    expect(owed.get('aarav')).toBe(-750 + 300);
+    expect([...owed.values()].reduce((a, b) => a + b, 0)).toBe(0);
   });
 });

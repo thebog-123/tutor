@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useGroup } from '../data';
 import { leaderboard, entryProfit, gameTotals } from '../lib/stats';
-import { simplifyDebts } from '../lib/settle';
+import { settle } from '../lib/settlement';
 import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
 import { Banner, Empty, Money, SectionTitle, formatDate, useToast } from '../ui';
@@ -51,16 +51,11 @@ export function Overview() {
   const viewer = { userId: g.me.userId, isAdmin: g.me.isAdmin, claimedBy: (id: string) => g.playersById.get(id)?.claimed_by ?? null };
   const pending = g.payments.filter((p) => needsMe(p, viewer));
   const myDrafts = g.me.isAdmin ? drafts : [];
-  const myTransfers = useMemo(() => {
-    if (!myPlayer) return [];
-    try {
-      return simplifyDebts(g.balances.map((b) => ({ id: b.player_id, name: g.playerName(b.player_id), balance: b.balance_pence }))).filter(
-        (t) => t.from === myPlayer.id || t.to === myPlayer.id,
-      );
-    } catch {
-      return [];
-    }
-  }, [g, myPlayer]);
+  // Who I owe / who owes me, worked out game by game (same as the Payments page).
+  const myTransfers = useMemo(
+    () => (myPlayer ? settle(g.games, g.payments).pairs.filter((t) => t.from === myPlayer.id || t.to === myPlayer.id) : []),
+    [g.games, g.payments, myPlayer],
+  );
 
   return (
     <div className="stack-lg">
@@ -120,11 +115,11 @@ export function Overview() {
                 <li key={i} style={{ borderColor: 'rgba(255,255,255,0.12)', padding: '6px 0' }}>
                   {t.from === myPlayer.id ? (
                     <>
-                      Pay <b>{g.playerName(t.to)}</b> <Money pence={t.amount} />
+                      You owe <b>{g.playerName(t.to)}</b> <Money pence={t.amount} />
                     </>
                   ) : (
                     <>
-                      <b>{g.playerName(t.from)}</b> pays you <Money pence={t.amount} />
+                      <b>{g.playerName(t.from)}</b> owes you <Money pence={t.amount} />
                     </>
                   )}
                 </li>

@@ -361,20 +361,16 @@ suite('Felt database', () => {
       expect(bal.Ben.profit).toBe(-3000);
     });
 
-    it('rejects overpayments and payments between the wrong people', async () => {
+    it('rejects bad payments, but lets someone pay a debt even if they are owed money overall', async () => {
       // Now: Alex +15, Ben -15, Chloe 0, Dev -25, Ella +35, Finn -10.
-      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2600, p_note: '' }), 'FT422', /only owes £25.00/);
-      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Alex, p_amount_pence: 1600, p_note: '' }), 'FT422', /only owed £15.00/);
-      await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Alex, p_to: P.Ella, p_amount_pence: 100, p_note: '' }), 'FT422', /only owes £0.00/);
       await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Dev, p_amount_pence: 100, p_note: '' }), 'FT422');
       await fails(bob.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 0, p_note: '' }), 'FT422');
-      // Two pending payments that each fit, but not together: the second can't be fully confirmed.
-      const a = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2000, p_note: '' }));
-      const b = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 2000, p_note: '' }));
-      await ok(alice.rpc('confirm_payment', { p_payment: a }));
-      await fails(alice.rpc('confirm_payment', { p_payment: b }), 'FT422', /overpay/);
-      expect((await ok(alice.from('payments').select('status,payer_confirmed_by').eq('id', b).single()))).toEqual({ status: 'pending', payer_confirmed_by: null });
-      await ok(alice.rpc('cancel_payment', { p_payment: b, p_reason: 'duplicate' }));
+      await fails(carol.rpc('record_payment', { p_group: groupId, p_from: P.Dev, p_to: P.Ella, p_amount_pence: 100, p_note: '' }), 'FT403');
+      // Debts are per game between pairs: Alex is owed money overall but may still owe Ella from one game.
+      const id = await ok(alice.rpc('record_payment', { p_group: groupId, p_from: P.Alex, p_to: P.Ella, p_amount_pence: 500, p_note: '' }));
+      await ok(alice.rpc('confirm_payment', { p_payment: id })); // admin covers Ella (unclaimed)
+      expect((await ok(alice.from('payments').select('status').eq('id', id).single())).status).toBe('confirmed');
+      await ok(alice.rpc('cancel_payment', { p_payment: id, p_reason: 'test' })); // void it again
     });
 
     it('settles everything when the suggested transfers are paid and confirmed', async () => {

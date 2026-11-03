@@ -101,10 +101,14 @@ await alice.getByRole('link', { name: 'Payments' }).last().click();
 await alice.getByText('Who owes whom').waitFor();
 await shot(alice, '09-payments');
 const firstTransfer = (await alice.locator('.transfer').first().innerText()).replace(/\s+/g, ' ');
+// Everyone view: game-by-game debts per pair, with the game they come from.
+for (const line of ['Dev owes Alice £20', 'Ben owes Chloe £10', 'Ben owes Alice £5']) {
+  if (!(await alice.locator('.transfer').filter({ hasText: line }).count())) errors.push(`Everyone view missing "${line}"`);
+}
 // Bob says he has paid Alice; it only counts once Alice confirms she received it.
 await bob.goto(invite.replace(/join\/.*/, ''));
 await bob.getByRole('link', { name: 'Payments' }).last().click();
-const bobRow = bob.locator('.transfer').filter({ hasText: /^Ben pays Alice/ });
+const bobRow = bob.locator('.transfer').filter({ hasText: /^Ben owes Alice/ });
 await bobRow.getByRole('button', { name: "I've paid" }).click();
 await bob.getByRole('button', { name: 'Record payment' }).click();
 await bob.getByText('Waiting for confirmation (1)').waitFor();
@@ -131,7 +135,7 @@ await alice.getByRole('tab', { name: 'Everyone' }).click();
 await alice.getByRole('link', { name: 'Games' }).last().click();
 await alice.locator('.list-item').filter({ hasText: 'Poker night' }).getByText('Payments outstanding').waitFor();
 await alice.locator('.list-item').filter({ hasText: 'Poker night' }).click();
-await alice.getByText('Still to pay:', { exact: false }).waitFor();
+await alice.locator('.banner').getByText('Dev owes Alice £20').waitFor();
 await alice.getByRole('button', { name: 'Rename game' }).click();
 await alice.getByLabel('Game name').fill('Opening night');
 await alice.getByRole('button', { name: 'Save name' }).click();

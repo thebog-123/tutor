@@ -306,6 +306,7 @@ function PlayerSheet({ player, onClose }: { player?: Player; onClose: () => void
           {busy ? <span className="spinner" /> : player ? 'Save' : 'Add player'}
         </button>
       </form>
+      {player && g.me.isAdmin && <MergePlayer player={player} onDone={onClose} />}
     </Sheet>
   );
 }
@@ -494,6 +495,7 @@ const ACTIONS: Record<string, string> = {
   'player.updated': 'edited a player',
   'player.claimed': 'claimed a player',
   'player.unclaimed': 'unclaimed a player',
+  'player.merged': 'merged two players',
   'game.draft_created': 'submitted a draft game',
   'game.draft_deleted': 'deleted a draft',
   'game.finalised': 'finalised a game',
@@ -518,6 +520,7 @@ function describe(row: AuditRow, playerName: (id: string) => string): string {
     return d.from && d.to ? `${verb}: ${playerName(d.from as string)} → ${playerName(d.to as string)} ${amt}` : `${verb} of ${amt}`;
   }
   if (row.action === 'player.updated' && d.from !== d.to) return `${verb}: ${d.from} → ${d.to}`;
+  if (row.action === 'player.merged') return `${verb}: ${d.from} into ${d.into}`;
   return name ? `${verb}: ${name}` : verb;
 }
 
@@ -655,5 +658,63 @@ function LeaveSection() {
         </Confirm>
       )}
     </div>
+  );
+}
+
+/** Admin: fold this player into another one, e.g. a duplicate or guest someone had to create. */
+function MergePlayer({ player, onDone }: { player: Player; onDone: () => void }) {
+  const g = useGroup();
+  const toast = useToast();
+  const [into, setInto] = useState('');
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const others = g.players.filter((p) => p.id !== player.id).sort((a, b) => a.name.localeCompare(b.name));
+  const target = others.find((p) => p.id === into);
+  return (
+    <details className="card stack-sm" style={{ marginTop: 16 }}>
+      <summary>Merge {player.name} into another player</summary>
+      <p className="small muted">
+        For duplicates, such as a guest someone had to add because their name was claimed by the wrong account. All of {player.name}'s games and
+        payments move to the player you choose, and {player.name} is removed. If {player.name} is claimed, the claim moves too. It can't be undone.
+      </p>
+      <select className="input" aria-label="Merge into" value={into} onChange={(e) => { setInto(e.target.value); setSure(false); }}>
+        <option value="">Merge into…</option>
+        {others.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+            {p.is_guest ? ' (guest)' : ''}
+            {p.claimed_by ? ` · claimed by ${g.personName(p.claimed_by)}` : ''}
+          </option>
+        ))}
+      </select>
+      <ErrorBanner error={error} />
+      {target && !sure && (
+        <button className="btn danger" onClick={() => setSure(true)}>
+          Merge {player.name} into {target.name}
+        </button>
+      )}
+      {target && sure && (
+        <button
+          className="btn danger"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await rpc('merge_players', { p_from: player.id, p_into: target.id });
+              await g.reload();
+              toast.show(`${player.name} merged into ${target.name}`);
+              onDone();
+            } catch (e) {
+              setError(e);
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? <span className="spinner" /> : `Yes, merge ${player.name} into ${target.name}`}
+        </button>
+      )}
+    </details>
   );
 }

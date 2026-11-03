@@ -627,6 +627,45 @@ begin
   return v_id;
 end $$;
 
+-- Admin: fold one player into another (e.g. a guest someone had to create because
+-- their name was claimed by the wrong account). Their games and payments move
+-- across; the merged-away player is deleted. Refused if both played the same game.
+create or replace function public.merge_players(p_from uuid, p_into uuid) returns void
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_a players%rowtype; v_b players%rowtype;
+begin
+  select * into v_a from players where id = p_from;
+  select * into v_b from players where id = p_into;
+  if v_a.id is null or v_b.id is null then perform _fail('FT404', 'Player not found.'); end if;
+  if v_a.group_id <> v_b.group_id then perform _fail('FT422', 'Both players must be in the same group.'); end if;
+  if p_from = p_into then perform _fail('FT422', 'Pick two different players.'); end if;
+  perform _require_admin(v_a.group_id);
+  perform _lock_group(v_a.group_id);
+  if v_a.claimed_by is not null and v_b.claimed_by is not null then
+    perform _fail('FT409', 'Both players are claimed by different accounts. Unclaim one of them first.');
+  end if;
+  if exists (select 1 from game_entries a join game_entries b on a.game_id = b.game_id
+             where a.player_id = p_from and b.player_id = p_into) then
+    perform _fail('FT409', v_a.name || ' and ' || v_b.name || ' both played in the same game, so they can''t be merged.');
+  end if;
+  if exists (select 1 from payments where status in ('pending', 'confirmed')
+             and ((from_player = p_from and to_player = p_into) or (from_player = p_into and to_player = p_from))) then
+    perform _fail('FT409', 'There are payments between ' || v_a.name || ' and ' || v_b.name || '. Void or reject them first.');
+  end if;
+  -- Rejected/voided payments between the two would become payments to themselves: drop them.
+  delete from payments where (from_player = p_from and to_player = p_into) or (from_player = p_into and to_player = p_from);
+  update game_entries set player_id = p_into where player_id = p_from;
+  update payments set from_player = p_into where from_player = p_from;
+  update payments set to_player = p_into where to_player = p_from;
+  if v_a.claimed_by is not null then
+    update players set claimed_by = null where id = p_from;
+    update players set claimed_by = v_a.claimed_by, is_guest = false where id = p_into;
+  end if;
+  if not v_a.is_guest then update players set is_guest = false where id = p_into; end if;
+  delete from players where id = p_from;
+  perform _audit(v_a.group_id, 'player.merged', 'player', p_into, jsonb_build_object('from', v_a.name, 'into', v_b.name));
+end $$;
+
 create or replace function public.claim_player(p_player uuid) returns void
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_uid uuid := _uid(); v_p players%rowtype;
@@ -984,7 +1023,6 @@ begin
   end if;
   select * into v_p from payments where id = p_payment;
   if v_p.payer_confirmed_at is not null and v_p.payee_confirmed_at is not null then
-    perform _check_payment_fits(v_p.group_id, v_p.from_player, v_p.to_player, v_p.amount_pence);
     update payments set status = 'confirmed', confirmed_by = auth.uid(), confirmed_at = now(), version = version + 1
     where id = p_payment;
     perform _audit(v_p.group_id, 'payment.confirmed', 'payment', p_payment,
@@ -1012,7 +1050,8 @@ begin
   end if;
   if p_amount_pence is null or p_amount_pence <= 0 then perform _fail('FT422', 'Enter an amount more than £0.00.'); end if;
   perform _lock_group(p_group);
-  perform _check_payment_fits(p_group, p_from, p_to, p_amount_pence);
+  -- No "can't owe that much overall" check: debts are game by game between pairs of
+  -- players, and both people confirming the payment is the safeguard against mistakes.
   insert into payments (group_id, from_player, to_player, amount_pence, note, status, client_token, recorded_by)
   values (p_group, p_from, p_to, p_amount_pence, _clean_text(p_note, 'Note', 200, false), 'pending', p_client_token, v_uid)
   returning id into v_id;
@@ -1347,7 +1386,7 @@ grant execute on function
   public.preview_invite(text), public.join_group(text), public.regenerate_invite(uuid),
   public.set_member_role(uuid, uuid, text), public.remove_member(uuid, uuid),
   public.add_player(uuid, text, boolean), public.update_player(uuid, text, boolean),
-  public.claim_player(uuid), public.unclaim_player(uuid), public.add_me_as_player(uuid, text),
+  public.claim_player(uuid), public.unclaim_player(uuid), public.add_me_as_player(uuid, text), public.merge_players(uuid, uuid),
   public.save_game_draft(uuid, uuid, integer, text, date, text, jsonb, uuid),
   public.delete_draft(uuid, integer), public.finalise_game(uuid, integer),
   public.start_live_game(uuid, text, date, integer, uuid[], uuid), public.live_join(uuid, uuid, integer),

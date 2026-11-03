@@ -7,7 +7,7 @@ import { formatPence } from '../lib/money';
 import { Banner, Confirm, Empty, ErrorBanner, Money, SectionTitle, Sheet, Skeleton, formatDate, formatDateTime, useToast } from '../ui';
 import type { AuditRow, Game } from '../types';
 import { LiveGame } from './LiveGame';
-import { settlementByGame, type GameSettlement } from '../lib/settlement';
+import { settle, type DebtLine } from '../lib/settlement';
 
 export function StatusBadge({ status }: { status: Game['status'] }) {
   if (status === 'final') return <span className="badge green">Final</span>;
@@ -24,7 +24,7 @@ export function GamesList() {
     .filter((x) => showVoid || x.status !== 'void')
     .sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live'));
   const voidCount = g.games.length - g.games.filter((x) => x.status !== 'void').length;
-  const settlement = useMemo(() => settlementByGame(g.games, g.payments), [g.games, g.payments]);
+  const settlement = useMemo(() => settle(g.games, g.payments), [g.games, g.payments]);
   return (
     <div className="stack-lg">
       <div className="row-between">
@@ -54,7 +54,7 @@ export function GamesList() {
                     <span className="row" style={{ gap: 8 }}>
                       <b className="ellipsis">{game.name}</b>
                       {game.status !== 'final' && <StatusBadge status={game.status} />}
-                      {game.status === 'final' && <SettledBadge s={settlement.get(game.id)} />}
+                      {game.status === 'final' && <SettledBadge settled={settlement.settled.get(game.id)} />}
                     </span>
                     <span className="small muted">
                       {formatDate(game.played_on)} · {game.entries.length} players · pot {formatPence(pot)}
@@ -84,7 +84,7 @@ export function GameDetail({ gameId }: { gameId: string }) {
   const game = g.games.find((x) => x.id === gameId);
   const [dialog, setDialog] = useState<'finalise' | 'delete' | 'void' | null>(null);
   const [renaming, setRenaming] = useState(false);
-  const settlement = useMemo(() => settlementByGame(g.games, g.payments), [g.games, g.payments]);
+  const settlement = useMemo(() => settle(g.games, g.payments), [g.games, g.payments]);
   const [history, setHistory] = useState<AuditRow[] | null>(null);
   const [historyError, setHistoryError] = useState<unknown>(null);
 
@@ -132,7 +132,7 @@ export function GameDetail({ gameId }: { gameId: string }) {
           </div>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <StatusBadge status={game.status} />
-            {game.status === 'final' && <SettledBadge s={settlement.get(game.id)} />}
+            {game.status === 'final' && <SettledBadge settled={settlement.settled.get(game.id)} />}
           </div>
         </div>
         <p className="muted small">
@@ -142,7 +142,7 @@ export function GameDetail({ gameId }: { gameId: string }) {
       </div>
 
       {game.status === 'final' && (
-        <OutstandingBanner outstanding={settlement.get(game.id)?.outstanding ?? []} />
+        <OutstandingBanner lines={settlement.lines.get(game.id) ?? []} />
       )}
 
       {game.status === 'void' && (
@@ -321,25 +321,27 @@ export function describeGameAction(action: string) {
   );
 }
 
-function SettledBadge({ s }: { s?: GameSettlement }) {
-  if (!s) return null;
-  return s.settled ? <span className="badge green">✓ Settled</span> : <span className="badge warn">Payments outstanding</span>;
+function SettledBadge({ settled }: { settled?: boolean }) {
+  if (settled === undefined) return null;
+  return settled ? <span className="badge green">✓ Settled</span> : <span className="badge warn">Payments outstanding</span>;
 }
 
-function OutstandingBanner({ outstanding }: { outstanding: string[] }) {
+function OutstandingBanner({ lines }: { lines: DebtLine[] }) {
   const g = useGroup();
-  if (outstanding.length === 0) return <Banner tone="ok">✓ Everyone has settled up for this game.</Banner>;
-  const balance = (id: string) => g.balances.find((b) => b.player_id === id)?.balance_pence ?? 0;
-  const owes = outstanding.filter((id) => balance(id) < 0);
-  const owed = outstanding.filter((id) => balance(id) > 0);
-  const names = (ids: string[]) => ids.map((id) => g.playerName(id)).join(', ');
+  const open = lines.filter((l) => l.left > 0).sort((a, b) => b.left - a.left);
+  if (open.length === 0) return <Banner tone="ok">✓ Everyone has settled up for this game.</Banner>;
   return (
     <Banner tone="warn">
       <div className="stack-sm">
-        <span>
-          <b>Payments outstanding.</b> {owes.length > 0 && <>Still to pay: {names(owes)}. </>}
-          {owed.length > 0 && <>Still to be paid: {names(owed)}.</>}
-        </span>
+        <b>Payments outstanding</b>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {open.map((l) => (
+            <li key={`${l.from}-${l.to}`}>
+              {g.playerName(l.from)} owes {g.playerName(l.to)} {formatPence(l.left)}
+              {l.left < l.amount && <span className="muted"> (of {formatPence(l.amount)})</span>}
+            </li>
+          ))}
+        </ul>
         <a className="btn small" style={{ alignSelf: 'flex-start' }} href={`#/g/${g.group.id}/payments`}>
           Settle up
         </a>

@@ -1,14 +1,13 @@
-// Which finished games still have money outstanding, and how much.
+// Who owes whom, game by game.
 //
-// Payments aren't tied to a particular game, because balances carry over, so each
-// player's history is replayed in time order (games when finalised, payments
-// when fully confirmed), first in, first out:
-//  - a game result opens a "lot" for that game (money the player owes, or is owed);
-//  - a later payment, or a later game going the other way, pays off the player's
-//    oldest open lots first;
-//  - whatever a game result has left after paying off older lots becomes its own lot.
-// A player is square for a game once that game's lot is used up; a game is
-// settled once every player in it is square.
+// Each finished game's own results are split into the fewest "X owes Y" lines
+// for that game. Debts are then tracked between pairs of players:
+//  - a confirmed payment from X to Y pays off X's lines to Y, oldest game first;
+//  - if X owes Y from one game and Y owes X from another, those amounts cancel
+//    out ("evened out between you"), oldest first.
+// A game is settled once all its lines are paid or evened out. Each player's
+// overall balance is still the sum of their results and payments, so it always
+// agrees with these lines.
 import { entryProfit, type EntryLike } from './stats';
 import { matchTransfers, simplifyDebts } from './settle';
 
@@ -28,121 +27,41 @@ interface PaymentIn {
   confirmed_at: string | null;
 }
 
-export interface PlayerInGame {
-  result: number; // profit (+) or loss (-) that night
-  remaining: number; // still outstanding for this game: negative = owes, positive = is owed
-  paid: number; // settled by payments (pennies, always >= 0)
-  offset: number; // settled by results in other games (pennies, always >= 0)
+export interface DebtLine {
+  gameId: string;
+  from: string;
+  to: string;
+  amount: number; // pennies owed from this game
+  paid: number; // covered by payments from `from` to `to`
+  offset: number; // cancelled out by `to` owing `from` from another game
+  left: number; // still to pay
 }
 
-export interface GameSettlement {
-  settled: boolean;
-  outstanding: string[]; // player ids not yet square for this game
-  players: Map<string, PlayerInGame>;
+export interface PairDebt {
+  from: string;
+  to: string;
+  amount: number; // what `from` still owes `to`, all games together
+  games: { gameId: string; amount: number }[]; // which games it comes from, oldest first
 }
 
 export interface Allocation {
   gameId: string;
-  amount: number; // pennies of the payment that went towards this game
+  amount: number; // pennies of a payment that went towards this game
 }
 
-type Event = { t: string; order: number; player: string; delta: number; gameId: string | null; paymentId: string | null; payer: boolean };
-type Lot = { gameId: string; amount: number };
-
-export function settlementDetails(
-  games: GameIn[],
-  payments: PaymentIn[],
-): { byGame: Map<string, GameSettlement>; allocations: Map<string, Allocation[]> } {
-  const events: Event[] = [];
-  const byGame = new Map<string, GameSettlement>();
-  for (const g of games) {
-    if (g.status !== 'final') continue;
-    const players = new Map<string, PlayerInGame>();
-    for (const e of g.entries) {
-      const result = entryProfit(e);
-      players.set(e.player_id, { result, remaining: 0, paid: 0, offset: 0 });
-      events.push({ t: g.finalised_at ?? g.updated_at, order: 0, player: e.player_id, delta: result, gameId: g.id, paymentId: null, payer: false });
-    }
-    byGame.set(g.id, { settled: true, outstanding: [], players });
-  }
-  payments.forEach((p, i) => {
-    if (p.status !== 'confirmed' || !p.confirmed_at) return;
-    const id = p.id ?? `#${i}`;
-    events.push({ t: p.confirmed_at, order: 1, player: p.from_player, delta: p.amount_pence, gameId: null, paymentId: id, payer: true });
-    events.push({ t: p.confirmed_at, order: 1, player: p.to_player, delta: -p.amount_pence, gameId: null, paymentId: id, payer: false });
-  });
-  events.sort((a, b) => a.t.localeCompare(b.t) || a.order - b.order);
-
-  const lots = new Map<string, Lot[]>();
-  const allocations = new Map<string, Allocation[]>();
-  for (const ev of events) {
-    const queue = lots.get(ev.player) ?? [];
-    lots.set(ev.player, queue);
-    let left = ev.delta;
-    // Pay off the oldest open lots that go the other way.
-    while (left !== 0 && queue.length && Math.sign(queue[0].amount) !== Math.sign(left)) {
-      const lot = queue[0];
-      const used = Math.min(Math.abs(lot.amount), Math.abs(left));
-      lot.amount += Math.sign(left) * used;
-      left -= Math.sign(left) * used;
-      const info = byGame.get(lot.gameId)?.players.get(ev.player);
-      if (info) {
-        if (ev.gameId) info.offset += used;
-        else info.paid += used;
-      }
-      if (ev.paymentId && ev.payer) {
-        const list = allocations.get(ev.paymentId) ?? [];
-        list.push({ gameId: lot.gameId, amount: used });
-        allocations.set(ev.paymentId, list);
-      }
-      if (lot.amount === 0) queue.shift();
-    }
-    // A game's leftover becomes its own lot (a payment can't overpay, so it has none).
-    if (left !== 0 && ev.gameId) queue.push({ gameId: ev.gameId, amount: left });
-  }
-
-  for (const [player, queue] of lots) {
-    for (const lot of queue) {
-      const g = byGame.get(lot.gameId);
-      const info = g?.players.get(player);
-      if (g && info) {
-        info.remaining = lot.amount;
-        if (lot.amount !== 0) g.outstanding.push(player);
-      }
-    }
-  }
-  for (const g of byGame.values()) g.settled = g.outstanding.length === 0;
-  return { byGame, allocations };
+export interface Settlement {
+  lines: Map<string, DebtLine[]>; // by game
+  settled: Map<string, boolean>; // by game
+  pairs: PairDebt[]; // who still owes whom, largest first
+  allocations: Map<string, Allocation[]>; // by payment id
 }
 
-export function settlementByGame(games: GameIn[], payments: PaymentIn[]): Map<string, GameSettlement> {
-  return settlementDetails(games, payments).byGame;
-}
+const when = (g: GameIn) => g.finalised_at ?? g.updated_at;
 
-// ---------------------------------------------------------------------------
-// Who owes whom, game by game: each game's own results turned into the fewest
-// "X owes Y" lines for that game. A confirmed payment from X to Y pays off X's
-// lines to Y, oldest game first.
-// ---------------------------------------------------------------------------
-
-export interface DebtLine {
-  from: string;
-  to: string;
-  amount: number; // pennies owed from this game
-  paid: number; // pennies of it covered by payments from `from` to `to`
-}
-
-export function debtsByGame(games: GameIn[], payments: PaymentIn[]): Map<string, DebtLine[]> {
-  const finals = games
-    .filter((g) => g.status === 'final')
-    .sort((a, b) => (a.finalised_at ?? a.updated_at).localeCompare(b.finalised_at ?? b.updated_at));
-  const pool = new Map<string, number>(); // "from|to" -> confirmed pennies not yet used
-  for (const p of payments) {
-    if (p.status !== 'confirmed') continue;
-    const key = `${p.from_player}|${p.to_player}`;
-    pool.set(key, (pool.get(key) ?? 0) + p.amount_pence);
-  }
-  const out = new Map<string, DebtLine[]>();
+export function settle(games: GameIn[], payments: PaymentIn[]): Settlement {
+  const finals = games.filter((g) => g.status === 'final').sort((a, b) => when(a).localeCompare(when(b)));
+  const lines = new Map<string, DebtLine[]>();
+  const byPair = new Map<string, DebtLine[]>(); // "from|to" -> lines, oldest first
   for (const g of finals) {
     const balances = g.entries.map((e) => ({ id: e.player_id, name: e.player_id, balance: entryProfit(e) }));
     let transfers;
@@ -151,15 +70,77 @@ export function debtsByGame(games: GameIn[], payments: PaymentIn[]): Map<string,
     } catch {
       transfers = matchTransfers(balances); // only if a game somehow doesn't balance
     }
-    out.set(
-      g.id,
-      transfers.map((t) => {
-        const key = `${t.from}|${t.to}`;
-        const paid = Math.min(t.amount, pool.get(key) ?? 0);
-        pool.set(key, (pool.get(key) ?? 0) - paid);
-        return { from: t.from, to: t.to, amount: t.amount, paid };
-      }),
-    );
+    const list = transfers.map((t) => ({ gameId: g.id, from: t.from, to: t.to, amount: t.amount, paid: 0, offset: 0, left: t.amount }));
+    lines.set(g.id, list);
+    for (const l of list) {
+      const key = `${l.from}|${l.to}`;
+      byPair.set(key, [...(byPair.get(key) ?? []), l]);
+    }
   }
-  return out;
+
+  // Payments pay off the payer's lines to that person, oldest game first.
+  const confirmed = payments
+    .map((p, i) => ({ ...p, id: p.id ?? `#${i}` }))
+    .filter((p) => p.status === 'confirmed')
+    .sort((a, b) => (a.confirmed_at ?? '').localeCompare(b.confirmed_at ?? ''));
+  const allocations = new Map<string, Allocation[]>();
+  const paidTotal = new Map<string, number>(); // "from|to" -> all confirmed payments
+  for (const p of confirmed) {
+    const key = `${p.from_player}|${p.to_player}`;
+    paidTotal.set(key, (paidTotal.get(key) ?? 0) + p.amount_pence);
+    let left = p.amount_pence;
+    for (const l of byPair.get(key) ?? []) {
+      if (left === 0) break;
+      const use = Math.min(l.left, left);
+      if (use === 0) continue;
+      l.paid += use;
+      l.left -= use;
+      left -= use;
+      allocations.set(p.id, [...(allocations.get(p.id) ?? []), { gameId: l.gameId, amount: use }]);
+    }
+  }
+
+  // Debts both ways between two people cancel out, oldest first.
+  const people = new Set<string>();
+  for (const key of byPair.keys()) key.split('|').forEach((x) => people.add(x));
+  for (const p of confirmed) [p.from_player, p.to_player].forEach((x) => people.add(x));
+  const pairs: PairDebt[] = [];
+  const ids = [...people].sort();
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const [a, b] = [ids[i], ids[j]];
+      const ab = byPair.get(`${a}|${b}`) ?? [];
+      const ba = byPair.get(`${b}|${a}`) ?? [];
+      const cancel = Math.min(sum(ab.map((l) => l.left)), sum(ba.map((l) => l.left)));
+      for (const side of [ab, ba]) {
+        let c = cancel;
+        for (const l of side) {
+          const use = Math.min(l.left, c);
+          l.offset += use;
+          l.left -= use;
+          c -= use;
+        }
+      }
+      // What a still owes b overall (overpayments push it the other way).
+      const net =
+        sum(ab.map((l) => l.amount)) - sum(ba.map((l) => l.amount)) - (paidTotal.get(`${a}|${b}`) ?? 0) + (paidTotal.get(`${b}|${a}`) ?? 0);
+      if (net === 0) continue;
+      const [from, to, side] = net > 0 ? [a, b, ab] : [b, a, ba];
+      pairs.push({
+        from,
+        to,
+        amount: Math.abs(net),
+        games: side.filter((l) => l.left > 0).map((l) => ({ gameId: l.gameId, amount: l.left })),
+      });
+    }
+  }
+  pairs.sort((x, y) => y.amount - x.amount || x.from.localeCompare(y.from) || x.to.localeCompare(y.to));
+
+  const settled = new Map<string, boolean>();
+  for (const [id, list] of lines) settled.set(id, list.every((l) => l.left === 0));
+  return { lines, settled, pairs, allocations };
+}
+
+function sum(xs: number[]) {
+  return xs.reduce((a, b) => a + b, 0);
 }

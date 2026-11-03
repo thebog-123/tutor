@@ -270,3 +270,39 @@ suite('names, creators and renaming games', () => {
     expect(log.map((l: { detail: { to: string } }) => l.detail.to)).toEqual(["Bea's birthday", 'Birthday game']);
   });
 });
+
+suite('merging players', () => {
+  it('lets an admin fold a duplicate guest into the right player, keeping games, payments and the claim', async () => {
+    const [ann, bea, cal] = await Promise.all([newUser('mg-a'), newUser('mg-b'), newUser('mg-c')]);
+    const groupId = await ok(ann.rpc('create_group', { p_name: 'Merge', p_player_names: ['Ann', 'Bea'], p_claim_index: 1 }));
+    const { invite_code } = await ok(ann.from('groups').select('invite_code').eq('id', groupId).single());
+    await ok(bea.rpc('join_group', { p_code: invite_code }));
+    await ok(cal.rpc('join_group', { p_code: invite_code }));
+    const P = Object.fromEntries((await ok(ann.from('players').select('id,name').eq('group_id', groupId))).map((p: { id: string; name: string }) => [p.name, p.id]));
+    // Cal claimed "Bea" by mistake, so Bea had to add herself as a new player and played a game as that.
+    await ok(cal.rpc('claim_player', { p_player: P.Bea }));
+    const dupe = await ok(bea.rpc('add_me_as_player', { p_group: groupId, p_name: 'Bea (2)' }));
+    const d = await ok(ann.rpc('save_game_draft', {
+      p_group: groupId, p_game: null, p_expected_version: null, p_name: 'n', p_played_on: '2026-11-01', p_notes: '',
+      p_entries: [
+        { player_id: P.Ann, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: 2000 },
+        { player_id: dupe, buy_in_pence: 1000, rebuys_pence: [], cash_out_pence: 0 },
+      ],
+    }));
+    await ok(ann.rpc('finalise_game', { p_game: d.id, p_expected_version: d.version }));
+    const pay = await ok(bea.rpc('record_payment', { p_group: groupId, p_from: dupe, p_to: P.Ann, p_amount_pence: 400, p_note: '' }));
+
+    await fails(bea.rpc('merge_players', { p_from: dupe, p_into: P.Bea }), 'FT403'); // admins only
+    await fails(ann.rpc('merge_players', { p_from: dupe, p_into: P.Bea }), 'FT409', /Unclaim/); // both claimed
+    await ok(ann.rpc('unclaim_player', { p_player: P.Bea }));
+    await ok(ann.rpc('merge_players', { p_from: dupe, p_into: P.Bea }));
+
+    const beaId = (await bea.auth.getUser()).data.user!.id;
+    expect(await ok(ann.from('players').select('name,claimed_by').eq('id', P.Bea).single())).toEqual({ name: 'Bea', claimed_by: beaId });
+    expect(await ok(ann.from('players').select('id').eq('id', dupe))).toEqual([]);
+    expect((await ok(ann.from('game_entries').select('player_id').eq('game_id', d.id))).map((e: { player_id: string }) => e.player_id).sort()).toEqual([P.Ann, P.Bea].sort());
+    expect((await ok(ann.from('payments').select('from_player').eq('id', pay).single())).from_player).toBe(P.Bea);
+    // Can't merge two players who played in the same game.
+    await fails(ann.rpc('merge_players', { p_from: P.Bea, p_into: P.Ann }), 'FT409');
+  });
+});

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useGroup, type GroupData } from '../data';
 import { useSession } from '../session';
 import { entryProfit, gameTotals, leaderboard } from '../lib/stats';
-import { simplifyDebts } from '../lib/settle';
+import { settle } from '../lib/settlement';
 import { formatPence } from '../lib/money';
 import { needsMe } from '../lib/payments';
 import { Avatar, Banner, Empty, Money, SectionTitle, formatDate, formatDateTime } from '../ui';
@@ -349,14 +349,8 @@ function Settlements() {
   const me = g.me.player;
   const mine = useMemo(() => {
     if (!me) return { transfers: [], payments: [] };
-    let transfers: ReturnType<typeof simplifyDebts> = [];
-    try {
-      transfers = simplifyDebts(g.balances.map((b) => ({ id: b.player_id, name: g.playerName(b.player_id), balance: b.balance_pence }))).filter(
-        (t) => t.from === me.id || t.to === me.id,
-      );
-    } catch {
-      /* shown on the Payments page */
-    }
+    // Game by game, the same as the Payments page.
+    const transfers = settle(g.games, g.payments).pairs.filter((t) => t.from === me.id || t.to === me.id);
     return { transfers, payments: g.payments.filter((p) => p.from_player === me.id || p.to_player === me.id) };
   }, [g, me]);
   const balance = me ? g.balances.find((b) => b.player_id === me.id)?.balance_pence ?? 0 : 0;
@@ -384,11 +378,11 @@ function Settlements() {
                     <span className="grow who">
                       {t.from === me.id ? (
                         <>
-                          You pay <b>{g.playerName(t.to)}</b>
+                          You owe <b>{g.playerName(t.to)}</b>
                         </>
                       ) : (
                         <>
-                          <b>{g.playerName(t.from)}</b> pays you
+                          <b>{g.playerName(t.from)}</b> owes you
                         </>
                       )}{' '}
                       <span className="amt">{formatPence(t.amount)}</span>
